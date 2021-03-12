@@ -1,0 +1,17 @@
+{
+  "version": "0.2.1",
+  "defaults": {},
+  "configurations": [
+    {
+      "type": "cppgdb",
+      "name": "test",
+      "project": "CMakeLists.txt",
+      "projectTarget": "test",
+      "comment": "Learn how to configure WSL debugging. See here for more info http://aka.ms/vslinuxdebug",
+      "debuggerConfiguration": "gdb",
+      "args": [
+      ],
+      "env": {}
+    }
+  ]
+}
