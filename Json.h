@@ -12,6 +12,7 @@
 	・javascript と違い、数値は実数(double)と整数(std::intmax_t)に区別して処理しています。
 	・JSON5 の一部仕様を実装しています。
 	  ・コメント付きJSONをパース可能です。(オプションで無効に出来ます)
+	・JSON Pointer を実装しています。
 	・ストリーム入力のパース処理には非対応です。
 
 	・使い方例
@@ -27,15 +28,17 @@
 					"c": null
 				})");
 			double d0 = j["n"].get<double>();					// -123.456e+2 を取得
+			double da = j.at("n").get<double>();				// at() で参照する記述です。（範囲外の場合に例外が発生します）
 			double d1 = j["e"].get<double>();					// 0.0 を取得 (存在しない位置を指定したのでデフォルト値が取れる)
 			std::intmax_t n1 = j["n"].get<std::intmax_t>();		// -12346 を取得 (double値を四捨五入した整数値が取れます)
 			std::string s0 = j["list"][1].get<std::string>();	// "ABC" を取得
+			std::string sa = j.at(rlib::Json::Pointer("/list/1")).get<std::string>();	// JSON Pointerで指定する記述です。
 			std::string s1 = j["ary"][9].get<std::string>();	// 空文字を取得 (存在しない位置を指定したのでデフォルト値が取れる)
-			rlib::Json list = j["list"];								// "list"以下をコピー(複製)
+			rlib::Json list = j["list"];						// "list"以下をコピー(複製)
 			list[10]["add"] = 123;								// [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
 			bool compare = list == j["list"];					// 比較です。false が返ります。
 			std::string json = list.stringify();				// JSON 文字列を取得
-			rlib::Json &c = list.at(11);						// at() で参照すると範囲外の場合に例外が発生します
+			rlib::Json& c = list.at(11);						// at() で参照すると範囲外の場合に例外が発生します
 		} catch (rlib::Json::ParseException& e) {		// パース 失敗
 			std::cerr << e.what() << std::endl;
 		} catch (std::out_of_range& e) {				// 範囲外参照
@@ -162,7 +165,7 @@ namespace rlib
 					}
 					return true;
 				case Type::Map:
-					for (auto i : m_map) {
+					for (auto& i : m_map) {
 						if (i.second != s[i.first]) return false;
 					}
 					return true;
@@ -242,25 +245,25 @@ namespace rlib
 		}
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
-		const Json& operator[](const std::string& sKey)const {
+		const Json& operator[](const std::string& key)const {
 			const auto& m = map();
-			const auto i = m.find(sKey);
+			const auto i = m.find(key);
 			static const Json empty;
 			return i != m.end() ? i->second : empty;
 		}
 
 		// 連想配列から要素(参照)を取得 (取得出来るようキーを追加する)
-		Json& operator[](const std::string& sKey) {
-			return ensureMap()[sKey];
+		Json& operator[](const std::string& key) {
+			return ensureMap()[key];
 		}
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら throw std::out_of_range)
-		const Json& at(const std::string& sKey) const noexcept(false) {
-			return const_cast<std::remove_const<decltype(this)>::type>(this)->at(sKey);
+		const Json& at(const std::string& key) const noexcept(false) {
+			return const_cast<std::remove_const<std::remove_pointer<decltype(this)>::type>::type*>(this)->at(key);
 		}
-		Json& at(const std::string& sKey) noexcept(false) {
+		Json& at(const std::string& key) noexcept(false) {
 			if (m_type != Type::Map) throw std::out_of_range("not map");
-			const auto i = m_map.find(sKey);
+			const auto i = m_map.find(key);
 			if (i == m_map.end()) throw std::out_of_range("invalid key");
 			return i->second;
 		}
@@ -298,14 +301,13 @@ namespace rlib
 
 		// 配列から要素を取得 (範囲外指定は throw std::out_of_range)
 		const Json& at(size_t index) const noexcept(false) {
-			return const_cast<std::remove_const<decltype(this)>::type>(this)->at(index);
+			return const_cast<std::remove_const<std::remove_pointer<decltype(this)>::type>::type*>(this)->at(index);
 		}
 		Json& at(size_t index) noexcept(false) {
 			if (m_type != Type::Array) throw std::out_of_range("not array");
 			if (index >= m_array.size()) throw std::out_of_range("invalid index");
 			return m_array[index];
 		}
-
 
 		Type type()const noexcept {
 			return m_type;
@@ -318,6 +320,32 @@ namespace rlib
 		}
 
 		template <typename T> T get() const {}
+
+		// JSON Pointer
+		struct Pointer {	// JSON Pointer
+			const std::string& text;
+			Pointer(const std::string& s)
+				:text(s)
+			{}
+		};
+
+		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
+		const Json& operator[](const Pointer& pointer)const {
+			try{
+				return at(pointer);
+			}catch(std::out_of_range&){
+			}
+			static const Json empty;
+			return empty;
+		}
+		//// 連想配列から要素(参照)を取得 (取得出来るようキーを追加する)
+		// Json& operator[](const Pointer& pointer);	JsonPointer 版の実装はナシ(例外ナシを担保出来ない)
+
+		// 連想配列から要素を取得 (存在しないキーを指定されたら throw std::out_of_range)
+		const Json& at(const Pointer& pointer) const noexcept(false) {
+			return const_cast<std::remove_const<std::remove_pointer<decltype(this)>::type>::type*>(this)->at(pointer);
+		}
+		Json& at(const Pointer& pointer) noexcept(false);
 
 		// parse error
 		struct ParseException : public std::runtime_error {
@@ -355,6 +383,7 @@ namespace rlib
 				}flags;
 				vector<Json*>			parents;
 				string::const_iterator	it;
+				string::const_iterator	itLineEnd;
 
 				State(const std::string& s)
 					: json(s)
@@ -420,7 +449,7 @@ namespace rlib
 					if (state.parents.empty()) throw ParseException("", state.json, state.it);
 
 					// 終了?
-					if( state.it == state.json.cend() ){
+					if (state.it == state.json.cend()) {
 						if (!state.flags.bFinish) throw ParseException("", state.json, state.it);
 						break;
 					}
@@ -428,11 +457,11 @@ namespace rlib
 					smatch m;
 
 					// 先頭の行末を取得 (VisualC++ の regex は ^ が各行の先頭にヒットしてしまうので１行単位で処理する)
-					const auto itLineEnd = regex_search(state.it, state.json.cend(), m, regex("\n")) ? m[0].second : state.json.cend();
+					state.itLineEnd = regex_search(state.it, state.json.cend(), m, regex("\n")) ? m[0].second : state.json.cend();
 
 					// 空行なら次へ
-					if (!regex_search(state.it, itLineEnd, m, regex(R"([^\s])"))) {
-						state.it = itLineEnd;
+					if (!regex_search(state.it, state.itLineEnd, m, regex(R"([^\s])"))) {
+						state.it = state.itLineEnd;
 						continue;
 					}
 
@@ -462,7 +491,7 @@ namespace rlib
 							"(-?[0-9]+(\\.[0-9]*)?([eE][+-]?[0-9]+)?)"	"|";// 値 浮動小数点表記 (頭に"+"が付く数値はエラー扱い)
 						s.pop_back();	// 末尾の "|" を取る
 						const regex re("^\\s*(" + s + ")");
-						if (regex_search(state.it, itLineEnd, m, re)) {
+						if (regex_search(state.it, state.itLineEnd, m, re)) {
 							state.it = m[0].second;			// 次の位置
 							return m[1].str();
 						}
@@ -578,13 +607,13 @@ namespace rlib
 									R"(")"						")");
 								while (true) {
 									smatch m;
-									if (!regex_search(state.it, state.json.cend(), m, re)) throw ParseException("", state.json, state.it);
+									if (!regex_search(state.it, state.itLineEnd, m, re)) throw ParseException("", state.json, state.it);
 									state.it = m[0].second;
 									result += m[1].str();
 									const string sToken = m[2].str();
 									if (sToken == "\"") break;				// 文字列終了？
 
-									static const std::map<string, string> mapReplace{		// エスケープ文字10
+									static const std::map<string, string> mapReplace{		// エスケープ文字
 										{ R"(\")",	"\"" },
 										{ R"(\r)",	"\r" },
 										{ R"(\t)",	"\t" },
@@ -592,7 +621,7 @@ namespace rlib
 										{ R"(\b)",	"\b" },
 										{ R"(\\)",	"\\" },
 									};
-									auto i = mapReplace.find(sToken);
+									const auto i = mapReplace.find(sToken);
 									if (i != mapReplace.end()) {
 										result += i->second;
 										continue;
@@ -682,7 +711,7 @@ namespace rlib
 							{regex("\\/"),	R"(\/)"	},
 							{regex("\\\b"),	R"(\b)"	},
 						};
-						for (auto i : tbl) {
+						for (auto& i : tbl) {
 							result = regex_replace(result, i.re, i.dst, regex_constants::match_default);
 						}
 						return result;
@@ -702,14 +731,14 @@ namespace rlib
 						return "\"" + fEscape(j.m_string) + "\"";
 					case Type::Array:
 						s = "[";
-						for (auto i : j.m_array) {
+						for (auto& i : j.m_array) {
 							s += F::Get(i) + ",";
 						}
 						if (j.m_array.size() >= 1) s.pop_back();	// 末尾の "," を削除
 						return s + "]";
 					case Type::Map:
 						s = "{";
-						for (auto i : j.m_map) {
+						for (auto& i : j.m_map) {
 							s += "\"" + fEscape(i.first) + "\":" + F::Get(i.second) + ",";
 						}
 						if (j.m_map.size() >= 1) s.pop_back();	// 末尾の "," を削除
@@ -740,6 +769,9 @@ namespace rlib
 		}
 		return std::intmax_t();
 	}
+	template <> size_t Json::get<size_t>() const {
+		return static_cast<size_t>(get<std::intmax_t>());
+	}
 	template <> int Json::get<int>() const {
 		return static_cast<int>(get<std::intmax_t>());
 	}
@@ -747,5 +779,70 @@ namespace rlib
 		return m_type == Type::String ? m_string : std::string();
 	}
 
+	Json& Json::at(const Pointer& pointer) noexcept(false) {
+		const auto tokens = [&] {
+			using namespace std;
+			if (pointer.text.empty()) return decltype(m_array)();
+			const std::vector<string> tokens = [&] {
+				static const regex re("/");
+				const auto s = pointer.text + "/";
+				return std::vector<string>{ sregex_token_iterator(s.cbegin(), s.cend(), re, -1), sregex_token_iterator() };
+			}();
+
+			auto json = parse(			// jsonパース処理を使う
+				[&] {
+					string json = "[";
+					for (auto& s : tokens) {
+						smatch m;
+						static const regex r("^[0-9]+$");
+						if (regex_search(s, m, r)) {	// 整数なら
+							json += s + ",";
+						} else {
+							string result(s);
+							struct {
+								regex	re;
+								string	dst;
+							}static const tbl[] = {
+								{regex("~0"),	R"(~)"	},
+								{regex("~1"),	R"(/)"	},
+								{regex("\\\r"),	R"(\r)"	},
+								{regex("\\\t"),	R"(\t)"	},
+								//{regex("\\/"),R"(\/)"	},
+								{regex("\\\b"),	R"(\b)"	},
+							};
+							for (auto& i : tbl) {
+								result = regex_replace(result, i.re, i.dst, regex_constants::match_default);
+							}
+							json += "\"" + result + "\",";
+						}
+					}
+					json.pop_back();	// 末尾の "," を削除
+					return json + "]";
+				}());
+			assert(json.type() == Type::Array);
+			auto& v = json.ensureArray();
+			if (v[0].type() == Type::String && v[0].get<string>().empty()) {	// 先頭/の前の文字がある場合はNG
+				v[0].clear();
+			}
+			return v;
+		}();
+		if (tokens.empty()) return *this;										// 空文字を指定されたら自身を返す
+		if (!tokens[0].isNull()) throw std::out_of_range("invalid key");		// 先頭/の前の文字がある場合はNG
+		Json* p = this;
+		for (size_t i = 1; i < tokens.size(); i++) {
+			auto& j = tokens[i];
+			switch (j.type()) {
+			case Type::Int:
+				p = &(p->at(j.get<size_t>()));
+				break;
+			case Type::String:
+				p = &(p->at(j.get<std::string>()));
+				break;
+			default:
+				throw std::out_of_range("invalid key");
+			}
+		}
+		return *p;
+	}
 
 }

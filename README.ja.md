@@ -15,6 +15,7 @@ JSON パーサーです。C++での実装です。
 + javascript と違い、数値は実数(double)と整数(std::intmax_t)に区別して処理しています。
 + JSON5 の一部仕様を実装しています。
   + コメント付きJSONをパース可能です。(オプションで無効に出来ます)
++ JSON Pointer を実装しています。
 + ストリーム入力のパース処理には非対応です。
 
 
@@ -48,9 +49,11 @@ try {
             "c": null
         })");
     double d0 = j["n"].get<double>();                   // -123.456e+2 を取得
+    double da = j.at("n").get<double>();                // at() で参照する記述です。（範囲外の場合に例外が発生します）
     double d1 = j["e"].get<double>();                   // 0.0 を取得 (存在しない位置を指定したのでデフォルト値が取れる)
     std::intmax_t n1 = j["n"].get<std::intmax_t>();     // -12346 を取得 (double値を四捨五入した整数値が取れます)
     std::string s0 = j["list"][1].get<std::string>();   // "ABC" を取得
+    std::string sa = j.at(rlib::Json::Pointer("/list/1")).get<std::string>();	// JSON Pointerで指定する記述です。
     std::string s1 = j["ary"][9].get<std::string>();    // 空文字を取得 (存在しない位置を指定したのでデフォルト値が取れる)
     rlib::Json list = j["list"];                        // "list"以下をコピー(複製)
     list[10]["add"] = 123;                              // [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
