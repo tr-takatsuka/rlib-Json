@@ -63,6 +63,10 @@ namespace rlib
 	class Json
 	{
 	public:
+		// version (major, minor, patch)
+		static std::tuple<int, int, int> version() {
+			return std::make_tuple(1, 0, 0);	// 1.0.0
+		}
 		enum class Type {
 			Null,		// null (デフォルト)
 			Bool,		// bool

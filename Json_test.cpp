@@ -5,21 +5,42 @@
 
 #include "Json.h"
 
+#if defined(_MSC_VER)
+#pragma warning(disable : 4566)
+#endif
+
 using namespace rlib;
 
 template <class CharT> std::basic_string<CharT> StringFormat(const boost::basic_format<CharT>& format) {
 	return format.str();
 }
 template <class CharT, class Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, Head& head, Tail&&... tail) {
-	//try {
-	//	using HeadT = std::remove_const_t<Head>;
-	//	if constexpr(std::is_same_v<HeadT, ATL::CStringA> || std::is_same_v<HeadT, ATL::CStringW>) {
-	//		return StringFormat<CharT>(format % std::basic_string<CharT>(head.GetString()), tail...);
-	//	}
-	//} catch (...) {
-	//}
+#if 0
+	try {
+		using HeadT = std::remove_const_t<Head>;
+		if constexpr(std::is_same_v<HeadT, ATL::CStringA> || std::is_same_v<HeadT, ATL::CStringW>) {
+			return StringFormat<CharT>(format % std::basic_string<CharT>(head.GetString()), tail...);
+		}
+	} catch (...) {
+	}
+#endif
 	return StringFormat<CharT>(format % head, tail...);
 }
+
+#if 0
+template <std::size_t I, class CharT, class... Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, const std::tuple<Head...>& head, Tail&&... tail)
+{
+	if constexpr (I < sizeof...(Head)) {
+		return StringFormat<I + 1, CharT>(format % std::get<I>(head), head, tail...);
+	}
+	return StringFormat<CharT>(format, tail...);;
+}
+
+template <class CharT, class... Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, const std::tuple<Head...>& head, Tail&&... tail) {
+	return StringFormat<0,CharT>(format,head, tail...);
+}
+#endif
+
 template <class CharT, class... Args> std::basic_string<CharT> StringFormat(const CharT* lpszFormat, Args&&... args) {
 	boost::basic_format<CharT> format;
 	format.exceptions(boost::io::no_error_bits);  // 例外を発生させない
@@ -36,6 +57,14 @@ BOOST_AUTO_TEST_CASE(json_test)
 	boost::unit_test::unit_test_log.set_threshold_level(boost::unit_test::log_level::log_messages);	// ログレベル
 
 	try {
+
+		{// version 表示
+			const auto v = Json::version();
+			BOOST_TEST_MESSAGE(StringFormat("rlib::Json version %d.%d.%d",
+				// v));
+				std::get<0>(v), std::get<1>(v), std::get<2>(v)));
+		}
+
 
 		try {
 			const rlib::Json j = rlib::Json::parse(				// JSON 文字列から構築
