@@ -9,14 +9,14 @@ JSON parser. Implementation in C++.
 + It is a data structure class that conforms to the JSON specification, with parse and output (stringify) functions added.
 + Works only with header files.
 + It can be built with C++11. It does not depend on external libraries such as boost.
-+ It is designed so that exceptions do not occur when referencing or editing. (Excluding the at() function)
-  + For out-of-range reads, the default value is taken, and for writes, an element is created.
-+ Input / output is supported only for std::string (UTF-8).
-+ Unlike javascript, numbers are processed separately as real numbers (double) and integers (std::intmax_t).
 + It implements some specifications of JSON5.
   + You can parse JSON with comments. (Can be disabled as an option)
 + Implements JSON Pointer.
-+ It does not support the parsing process of stream input.
++ It is designed so that exceptions do not occur when referencing or editing. (Excluding the at() function)
+  + For out-of-range reads, the default value is taken, and for writes, an element is created.
++ Unlike javascript, numbers are processed separately as real numbers (double) and integers (std::intmax_t).
++ Input / output is supported only for std::string (UTF-8).
+  + It does not support the parsing process of stream input.
 
 
 ## Requirement
@@ -59,7 +59,7 @@ try {
     list[10]["add"] = 123;                              // Added {"add": 123} to position [10] (positions of array [2-9] are padded with null)
     bool compare = list == j["list"];                   // It is a comparison. get false.
     std::string json = list.stringify();                // get JSON string
-    rlib::Json &c = list.at(11);                        // Referenced with at () raises an exception if out of range
+    rlib::Json &c = list.at(11);                        // Referenced with at() raises an exception if out of range
 } catch (rlib::Json::ParseException& e) {       // perse failure
     std::cerr << e.what() << std::endl;
 } catch (std::out_of_range& e) {                // Out-of-range
