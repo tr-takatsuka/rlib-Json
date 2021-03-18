@@ -88,7 +88,9 @@ BOOST_AUTO_TEST_CASE(json_test)
 			list[10]["add"] = 123;								// [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
 			bool compare = list == j["list"];					// 比較です。false が返ります。
 			std::string json = list.stringify();				// JSON 文字列を取得
-			rlib::Json& c = list.at(11);						// at() で参照すると範囲外の場合に例外が発生します
+			list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
+			list.erase(9);										// [9]の位置の要素(null)を削除
+			rlib::Json& c = list.at(10);						// at() で参照すると範囲外の場合に例外が発生します
 		} catch (rlib::Json::ParseException& e) {		// パース 失敗
 			std::cerr << e.what() << std::endl;
 		} catch (std::out_of_range& e) {				// 範囲外参照

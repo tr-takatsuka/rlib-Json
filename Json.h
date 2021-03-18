@@ -38,7 +38,9 @@
 			list[10]["add"] = 123;								// [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
 			bool compare = list == j["list"];					// 比較です。false が返ります。
 			std::string json = list.stringify();				// JSON 文字列を取得
-			rlib::Json& c = list.at(11);						// at() で参照すると範囲外の場合に例外が発生します
+			list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
+			list.erase(9);										// [9]の位置の要素(null)を削除
+			rlib::Json& c = list.at(10);						// at() で参照すると範囲外の場合に例外が発生します
 		} catch (rlib::Json::ParseException& e) {		// パース 失敗
 			std::cerr << e.what() << std::endl;
 		} catch (std::out_of_range& e) {				// 範囲外参照
@@ -46,26 +48,26 @@
 		}
 */
 
-
 #pragma once
 
+#include <cassert>
+#include <cmath>
 #include <codecvt>
-#include <string>
-#include <vector>
+#include <functional>
 #include <map>
-#include <memory>
 #include <regex>
-
+#include <tuple>
+#include <vector>
 
 namespace rlib
 {
 
-	class Json
+	template <class T = void> class JsonT
 	{
 	public:
 		// version (major, minor, patch)
 		static std::tuple<int, int, int> version() {
-			return std::make_tuple(1, 0, 0);	// 1.0.0
+			return std::make_tuple(1, 0, 1);	// 1.0.1
 		}
 		enum class Type {
 			Null,		// null (デフォルト)
@@ -76,62 +78,69 @@ namespace rlib
 			Array,		// 配列
 			Map,		// 連想配列(オブジェクト)
 		};
+		typedef std::vector<JsonT> Array;
+		typedef std::map<std::string, JsonT> Map;
 	private:
-		Type							m_type;
+		Type				m_type;
 		union {
-			bool						m_bool;
-			double						m_float;
-			std::intmax_t				m_int;
-			std::string					m_string;
-			std::vector<Json>			m_array;
-			std::map<std::string, Json>	m_map;
+			bool			m_bool;
+			double			m_float;
+			std::intmax_t	m_int;
+			std::string		m_string;
+			Array			m_array;
+			Map				m_map;
 		};
+	private:
+		static const JsonT			m_emptyJson;
+		static const std::string	m_emptyString;
+		static const Array			m_emptyArray;
+		static const Map			m_emptyMap;
 	public:
-		Json()
+		JsonT()
 			:m_type(Type::Null)
 		{}
-		explicit Json(std::nullptr_t)
+		explicit JsonT(std::nullptr_t)
 			:m_type(Type::Null)
 		{}
-		explicit Json(bool b)
+		explicit JsonT(bool b)
 			:m_type(Type::Bool), m_bool(b)
 		{}
-		explicit Json(double n)
+		explicit JsonT(double n)
 			:m_type(Type::Float), m_float(n)
 		{}
-		explicit Json(int n)
+		explicit JsonT(int n)
 			:m_type(Type::Int), m_int(n)
 		{}
-		explicit Json(std::intmax_t n)
+		explicit JsonT(std::intmax_t n)
 			:m_type(Type::Int), m_int(n)
 		{}
-		explicit Json(const char* p)
+		explicit JsonT(const char* p)
 			:m_type(Type::String), m_string(p)
 		{}
-		explicit Json(const decltype(m_string)& s)
+		explicit JsonT(const decltype(m_string)& s)
 			:m_type(Type::String), m_string(s)
 		{}
-		explicit Json(decltype(m_string) && s)
+		explicit JsonT(decltype(m_string) && s)
 			:m_type(Type::String), m_string(std::move(s))
 		{}
-		explicit Json(const decltype(m_array)& s)
+		explicit JsonT(const Array& s)
 			:m_type(Type::Array), m_array(s)
 		{}
-		explicit Json(decltype(m_array) && s)
+		explicit JsonT(Array&& s)
 			:m_type(Type::Array), m_array(std::move(s))
 		{}
-		explicit Json(const decltype(m_map)& s)
+		explicit JsonT(const Map& s)
 			:m_type(Type::Map), m_map(s)
 		{}
-		explicit Json(decltype(m_map) && s)
+		explicit JsonT(Map&& s)
 			:m_type(Type::Map), m_map(std::move(s))
 		{}
-		Json(const Json& s)
+		JsonT(const JsonT& s)
 			:m_type(Type::Null)
 		{
 			*this = s;
 		}
-		Json(Json&& s)
+		JsonT(JsonT&& s)
 			:m_type(s.m_type)
 		{
 			switch (m_type) {
@@ -146,100 +155,71 @@ namespace rlib
 			}
 		}
 
-		~Json() {
+		~JsonT() {
 			clear();
 		}
 
-		bool operator==(const Json& s)const {
-			if (m_type == s.m_type && size() == s.size()) {
+		bool operator==(const JsonT& s)const {
+			if (m_type == s.m_type) {
 				switch (m_type) {
-				case Type::Null:
-					return true;
-				case Type::Bool:
-					return m_bool == s.m_bool;
-				case Type::Float:
-					return m_float == s.m_float;
-				case Type::Int:
-					return m_int == s.m_int;
-				case Type::String:
-					return m_string == s.m_string;
-				case Type::Array:
-					for (size_t i = 0; i < m_array.size(); i++) {
-						if (m_array[i] != s.m_array[i]) return false;
-					}
-					return true;
-				case Type::Map:
-					for (auto& i : m_map) {
-						if (i.second != s[i.first]) return false;
-					}
-					return true;
+				case Type::Null:	return true;
+				case Type::Bool:	return m_bool == s.m_bool;
+				case Type::Float:	return m_float == s.m_float;
+				case Type::Int:		return m_int == s.m_int;
+				case Type::String:	return m_string == s.m_string;
+				case Type::Array:	return m_array == s.m_array;
+				case Type::Map:		return m_map == s.m_map;
 				}
 				assert(false);
 			}
 			return false;
 		}
 
-		bool operator!=(const Json& s)const {
+		bool operator!=(const JsonT& s)const {
 			return !(*this == s);
 		}
 
-		template <typename S> Json& operator=(const S& s) {
-			*this = Json(s);
+		template <typename S> JsonT& operator=(const S& s) {
+			*this = JsonT(s);
 			return *this;
 		}
 
-		Json& operator=(const Json& s) {
+		JsonT& operator=(const JsonT& s) {
 			if (this != &s) {
 				clear();
 				switch (s.m_type) {
-				case Type::Null:	new(this) Json(nullptr);	break;
-				case Type::Bool:	new(this) Json(s.m_bool);	break;
-				case Type::Float:	new(this) Json(s.m_float);	break;
-				case Type::Int:		new(this) Json(s.m_int);	break;
-				case Type::String:	new(this) Json(s.m_string);	break;
-				case Type::Array:	new(this) Json(s.m_array);	break;
-				case Type::Map:		new(this) Json(s.m_map);	break;
+				case Type::Null:	new(this) JsonT(nullptr);	break;
+				case Type::Bool:	new(this) JsonT(s.m_bool);	break;
+				case Type::Float:	new(this) JsonT(s.m_float);	break;
+				case Type::Int:		new(this) JsonT(s.m_int);	break;
+				case Type::String:	new(this) JsonT(s.m_string);	break;
+				case Type::Array:	new(this) JsonT(s.m_array);	break;
+				case Type::Map:		new(this) JsonT(s.m_map);	break;
 				default:		assert(false);
 				}
 			}
 			return *this;
 		}
-		Json& operator=(Json&& s) {
+		JsonT& operator=(JsonT&& s) {
 			if (this != &s) {
 				clear();
-				new(this) Json(std::move(s));
+				new(this) JsonT(std::move(s));
 			}
 			return *this;
 		}
 
 		void clear() {
-			typedef decltype(m_string)	TypeString;
-			typedef decltype(m_array)	TypeArray;
-			typedef decltype(m_map)		TypeMap;
+			typedef std::string TypeString;
 			switch (m_type) {
 			case Type::String:	m_string.~TypeString();	break;
-			case Type::Array:	m_array.~TypeArray();	break;
-			case Type::Map:		m_map.~TypeMap();		break;
+			case Type::Array:	m_array.~Array();		break;
+			case Type::Map:		m_map.~Map();			break;
 			}
 			m_type = Type::Null;
 		}
 
-		size_t size()const {
-			switch (m_type) {
-			case Type::Array:		return m_array.size();
-			case Type::Map:			return m_map.size();
-			}
-			return 1;
-		}
-
-		// 連想配列取得
-		const std::map<std::string, Json>& map()const {
-			static const decltype(m_map) empty;
-			return m_type == Type::Map ? m_map : empty;
-		}
-
-		// 連想配列を取得 (typeがMapではない場合、Mapに変更した上で返す)
-		std::map<std::string, Json>& ensureMap() {
+		// 連想配列を取得 (typeがMapではない場合、Mapに変更した上で返す。連想配列(map)を直接操作したい場合に使うべし)
+		Map& ensureMap() {
 			if (m_type != Type::Map) {
 				clear();
 				m_type = Type::Map;
@@ -249,38 +229,36 @@ namespace rlib
 		}
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
-		const Json& operator[](const std::string& key)const {
-			const auto& m = map();
+		const JsonT& operator[](const std::string& key)const {
+			const auto& m = get<Map>();
 			const auto i = m.find(key);
-			static const Json empty;
-			return i != m.end() ? i->second : empty;
+			return i != m.end() ? i->second : m_emptyJson;
 		}
 
 		// 連想配列から要素(参照)を取得 (取得出来るようキーを追加する)
-		Json& operator[](const std::string& key) {
+		JsonT& operator[](const std::string& key) {
 			return ensureMap()[key];
 		}
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら throw std::out_of_range)
-		const Json& at(const std::string& key) const noexcept(false) {
-			return const_cast<std::remove_const<std::remove_pointer<decltype(this)>::type>::type*>(this)->at(key);
+		const JsonT& at(const std::string& key) const noexcept(false) {
+			return const_cast<typename std::remove_const<typename std::remove_pointer<decltype(this)>::type>::type*>(this)->at(key);
 		}
-		Json& at(const std::string& key) noexcept(false) {
+		JsonT& at(const std::string& key) noexcept(false) {
 			if (m_type != Type::Map) throw std::out_of_range("not map");
 			const auto i = m_map.find(key);
 			if (i == m_map.end()) throw std::out_of_range("invalid key");
 			return i->second;
 		}
 
-
-		// 配列取得
-		const std::vector<Json>& array()const {
-			static const decltype(m_array) empty;
-			return m_type == Type::Array ? m_array : empty;
+		// 連想配列から指定のキーを削除 (存在しないキーを指定されたら何もしないでfalseを返す)
+		// 戻り値 true:削除した false:対象のキーが存在しなかった
+		bool erase(const std::string& key) {
+			return m_type == Type::Map ? m_map.erase(key) > 0 : false;
 		}
 
-		// 配列を取得 (typeがArrayではない場合、Arrayに変更した上で返す)
-		std::vector<Json>& ensureArray() {
+		// 配列を取得 (typeがArrayではない場合、Arrayに変更した上で返す。配列(vector)を直接操作したい場合に使うべし)
+		Array& ensureArray() {
 			if (m_type != Type::Array) {
 				clear();
 				m_type = Type::Array;
@@ -290,28 +268,36 @@ namespace rlib
 		}
 
 		// 配列から要素を取得 (範囲外指定は空実体を返す。例外発生しない)
-		const Json& operator[](size_t index)const {
-			const auto& a = array();
-			static const Json empty;
-			return index < a.size() ? a[index] : empty;
+		const JsonT& operator[](size_t index)const {
+			const auto& a = get<Array>();
+			return index < a.size() ? a[index] : m_emptyJson;
 		}
 
 		// 配列から要素(参照)を取得 (取得出来るよう必要に応じて配列を拡張する)
-		Json& operator[](size_t index) {
+		JsonT& operator[](size_t index) {
 			auto& a = ensureArray();
 			if (index >= a.size()) a.resize(index + 1);		// 足りないなら作る
 			return a[index];
 		}
 
 		// 配列から要素を取得 (範囲外指定は throw std::out_of_range)
-		const Json& at(size_t index) const noexcept(false) {
-			return const_cast<std::remove_const<std::remove_pointer<decltype(this)>::type>::type*>(this)->at(index);
+		const JsonT& at(size_t index) const noexcept(false) {
+			return const_cast<typename std::remove_const<typename std::remove_pointer<decltype(this)>::type>::type*>(this)->at(index);
 		}
-		Json& at(size_t index) noexcept(false) {
+		JsonT& at(size_t index) noexcept(false) {
 			if (m_type != Type::Array) throw std::out_of_range("not array");
 			if (index >= m_array.size()) throw std::out_of_range("invalid index");
 			return m_array[index];
 		}
+
+		// 配列から要素を削除 (存在しないindexを指定されたら何もしないでfalseを返す)
+		// 戻り値 true:削除した false:対象のindexが存在しなかった
+		bool erase(size_t index) {
+			if (m_type != Type::Array || index >= m_array.size()) return false;
+			m_array.erase(m_array.begin()+ index);
+			return true;
+		}
+
 
 		Type type()const noexcept {
 			return m_type;
@@ -323,33 +309,126 @@ namespace rlib
 			return isType(Type::Null);
 		}
 
-		template <typename T> T get() const {}
+		// bool
+		template<class U> U get(typename std::enable_if<std::is_same<U, bool>::value>::type* = nullptr) const noexcept {
+			switch (m_type) {
+			case Type::Bool:	return m_bool;
+			//case Type::Int:	return static_cast<T>(m_bool);
+			}
+			return decltype(m_bool)();
+		}
+		// 実数
+		template<class U> U get(typename std::enable_if<std::is_floating_point<U>::value>::type* = nullptr) const noexcept {
+			switch (m_type) {
+			case Type::Float:	return static_cast<U>(m_float);
+			case Type::Int:		return static_cast<U>(m_int);
+			}
+			return decltype(m_float)();
+		}
+		// 整数
+		template<class U> U get(typename std::enable_if<std::is_integral<U>::value && !std::is_same<U, bool>::value >::type* = nullptr) const noexcept {
+			switch (m_type) {
+			case Type::Bool:	return m_bool;
+			case Type::Float:	return static_cast<U>(std::llroundl(m_float));
+			case Type::Int:		return static_cast<U>(m_int);
+			}
+			return decltype(m_int)();
+		}
+		// 文字列
+		template<class U> const U& get(typename std::enable_if<std::is_same<U, std::string>::value >::type* = nullptr) const noexcept {
+			return m_type == Type::String ? m_string : m_emptyString;
+		}
+		// 配列
+		template<class U> const U& get(typename std::enable_if<std::is_same<U, Array>::value >::type* = nullptr) const noexcept {
+			return m_type == Type::Array ? m_array : m_emptyArray;
+		}
+		// 連想配列(オブジェクト)
+		template<class U> const U& get(typename std::enable_if<std::is_same<U, Map>::value >::type* = nullptr) const noexcept {
+			return m_type == Type::Map ? m_map : m_emptyMap;
+		}
 
 		// JSON Pointer
-		struct Pointer {	// JSON Pointer
-			const std::string& text;
-			Pointer(const std::string& s)
-				:text(s)
-			{}
+		struct Pointer {
+			const std::string text;
+			Pointer(const std::string& s) :text(s) {}
+			Pointer(std::string&& s) :text(std::move(s)) {}
 		};
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
-		const Json& operator[](const Pointer& pointer)const {
+		const JsonT& operator[](const Pointer& pointer)const {
 			try{
 				return at(pointer);
 			}catch(std::out_of_range&){
 			}
-			static const Json empty;
-			return empty;
+			return m_emptyJson;
 		}
 		//// 連想配列から要素(参照)を取得 (取得出来るようキーを追加する)
-		// Json& operator[](const Pointer& pointer);	JsonPointer 版の実装はナシ(例外ナシを担保出来ない)
+		// JsonT& operator[](const Pointer& pointer);	JsonPointer 版の実装はナシ(例外ナシを担保出来ない)
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら throw std::out_of_range)
-		const Json& at(const Pointer& pointer) const noexcept(false) {
-			return const_cast<std::remove_const<std::remove_pointer<decltype(this)>::type>::type*>(this)->at(pointer);
+		const JsonT& at(const Pointer& pointer) const noexcept(false) {
+			return const_cast<typename std::remove_const<typename std::remove_pointer<decltype(this)>::type>::type*>(this)->at(pointer);
 		}
-		Json& at(const Pointer& pointer) noexcept(false);
+		JsonT& at(const Pointer& pointer) noexcept(false) {
+			const auto tokens = [&] {
+				using namespace std;
+				if (pointer.text.empty()) return decltype(m_array)();
+				const std::vector<string> tokens = [&] {
+					static const regex re("/");
+					const auto s = pointer.text + "/";
+					return std::vector<string>{ sregex_token_iterator(s.cbegin(), s.cend(), re, -1), sregex_token_iterator() };
+				}();
+
+				auto json = parse(			// jsonパース処理を使う
+					[&] {
+						string json = "[";
+						for (auto& s : tokens) {
+							smatch m;
+							static const regex r("^[0-9]+$");
+							if (regex_search(s, m, r)) {	// 整数なら
+								json += s + ",";
+							} else {
+								string result(s);
+								struct {
+									regex	re;
+									string	dst;
+								}static const tbl[] = {
+									{regex("~0"),	R"(~)"	},
+									{regex("~1"),	R"(/)"	},
+									{regex("\\\r"),	R"(\r)"	},
+									{regex("\\\t"),	R"(\t)"	},
+									//{regex("\\/"),R"(\/)"	},
+									{regex("\\\b"),	R"(\b)"	},
+								};
+								for (auto& i : tbl) {
+									result = regex_replace(result, i.re, i.dst, regex_constants::match_default);
+								}
+								json += "\"" + result + "\",";
+							}
+						}
+						json.pop_back();	// 末尾の "," を削除
+						return json + "]";
+					}());
+				assert(json.type() == Type::Array);
+				auto& v = json.ensureArray();
+				if (v[0].type() == Type::String && v[0].template get<std::string>().empty()) {	// 先頭/の前の文字がある場合はNG
+					v[0].clear();
+				}
+				return v;
+			}();
+			if (tokens.empty()) return *this;										// 空文字を指定されたら自身を返す
+			if (!tokens[0].isNull()) throw std::out_of_range("invalid key");		// 先頭/の前の文字がある場合はNG
+			auto* p = this;
+			for (size_t i = 1; i < tokens.size(); i++) {
+				auto& j = tokens[i];
+				switch (j.type()) {
+				case Type::Int:		p = &(p->at(j.template get<int>()));			break;
+				case Type::String:	p = &(p->at(j.template get<std::string>()));	break;
+				default:	throw std::out_of_range("invalid key");
+				}
+			}
+			return *p;
+		}
 
 		// parse error
 		struct ParseException : public std::runtime_error {
@@ -369,12 +448,12 @@ namespace rlib
 		};
 
 		// JSON文字列をパース
-		static Json parse(const std::string& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
+		static JsonT parse(const std::string& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
 			using namespace std;
 
 			struct State {
 				const std::string& json;
-				Json				result;
+				JsonT				result;
 				union {									// 次トークン情報
 					struct {
 						uint16_t	bFinish : 1;		// 文末
@@ -385,7 +464,7 @@ namespace rlib
 					};
 					uint16_t		all = 0;
 				}flags;
-				vector<Json*>			parents;
+				vector<JsonT*>		parents;
 				string::const_iterator	it;
 				string::const_iterator	itLineEnd;
 
@@ -399,8 +478,8 @@ namespace rlib
 				}
 
 				// 値セット共通処理
-				void setValue(const Json& value) {
-					Json& parent = **parents.rbegin();
+				void setValue(const JsonT& value) {
+					auto& parent = **parents.rbegin();
 					switch (flags.value) {						// 値
 					case 1:											// オブジェクトの中の値
 						assert(parent.isNull());
@@ -411,7 +490,7 @@ namespace rlib
 						return;
 					case 2:										// 配列の値
 						if (!parent.isType(Type::Array)) throw ParseException("", json, it);
-						parent[parent.size()] = value;
+						parent[parent.m_array.size()] = value;
 						flags.all = 0;								// 次トークン
 						flags.end = 4;								// 配列終了あるいはカンマ
 						return;
@@ -521,9 +600,9 @@ namespace rlib
 						}},
 
 						{"{", [](State& state) {		// オブジェクト開始
-							Json& parent = **state.parents.rbegin();
+							auto& parent = **state.parents.rbegin();
 							if (parent.isType(Type::Array)) {				// 配列の中の要素なら
-								Json& v = parent[parent.size()];			// 要素を追加
+								auto& v = parent[parent.m_array.size()];	// 要素を追加
 								v.ensureMap();								// オブジェクトに設定
 								state.parents.push_back(&v);				// 親リストに自身を追加
 							} else {
@@ -542,16 +621,16 @@ namespace rlib
 						}},
 
 						{"}", [](State& state) {		// オブジェクト終了
-							Json& parent = **state.parents.rbegin();
+							auto& parent = **state.parents.rbegin();
 							if (!parent.isType(Type::Map)) throw ParseException("", state.json, state.it);
 							state.setEnd();
 						}},
 
 						{"[", [](State& state) {		// 配列開始
-							Json& parent = **state.parents.rbegin();
-							if (parent.isType(Type::Array)) {			// 配列の中の要素なら
-								Json& v = parent[parent.size()];		// 要素を追加
-								v.ensureArray();						// 配列に設定
+							auto& parent = **state.parents.rbegin();
+							if (parent.isType(Type::Array)) {				// 配列の中の要素なら
+								auto& v = parent[parent.m_array.size()];	// 要素を追加
+								v.ensureArray();							// 配列に設定
 								state.parents.push_back(&v);
 							} else {
 								if (!parent.isNull()) throw ParseException("", state.json, state.it);
@@ -564,7 +643,7 @@ namespace rlib
 						}},
 
 						{ "]", [](State& state) {		// 配列終了
-							Json& parent = **state.parents.rbegin();
+							auto& parent = **state.parents.rbegin();
 							if (!parent.isType(Type::Array)) throw ParseException("", state.json, state.it);
 							state.setEnd();
 						} },
@@ -585,15 +664,15 @@ namespace rlib
 						}},
 
 						{"true", [](State& state) {		// true
-							state.setValue(Json(true));
+							state.setValue(JsonT(true));
 						}},
 
 						{"false", [](State& state) {	// false
-							state.setValue(Json(false));
+							state.setValue(JsonT(false));
 						}},
 
 						{"null", [](State& state) {		// null
-							state.setValue(Json(nullptr));
+							state.setValue(JsonT(nullptr));
 						}},
 
 						{"\"", [](State& state) {		// 文字列
@@ -651,9 +730,9 @@ namespace rlib
 							}();
 
 							if (state.flags.objectKey == 1) {					// 処理したのはオブジェクトのキーなら
-								Json& parent = **state.parents.rbegin();
+								auto& parent = **state.parents.rbegin();
 								assert(parent.isType(Type::Map));
-								Json& v = parent[sText];
+								auto& v = parent[sText];
 								v.clear();									// 2度目以降の登場は後勝ち(JSONの仕様)
 								state.parents.push_back(&v);
 								state.flags.all = 0;						// 次トークン
@@ -661,7 +740,7 @@ namespace rlib
 								return;
 							}
 
-							state.setValue(Json(sText));
+							state.setValue(JsonT(sText));
 						}},
 
 					};
@@ -678,11 +757,11 @@ namespace rlib
 							static const regex r("^-?[0-9]+$");
 							if (regex_search(sToken, m, r)) {	// 整数なら
 								try {
-									return Json(static_cast<intmax_t>(stoll(sToken)));
+									return JsonT(static_cast<intmax_t>(stoll(sToken)));
 								} catch (const exception&) {
 								}
 							}
-							return Json(stod(sToken));			// doubleで処理
+							return JsonT(stod(sToken));			// doubleで処理
 						}());
 
 				} catch (const ParseException&) {
@@ -701,7 +780,7 @@ namespace rlib
 		std::string stringify()const {
 			using namespace std;
 			struct F {
-				static string Get(const Json& j) {
+				static string f(const JsonT& j) {
 					auto fEscape = [](const string& s) {	// 文字列エスケープ処理
 						string result(s);
 						struct {
@@ -736,14 +815,14 @@ namespace rlib
 					case Type::Array:
 						s = "[";
 						for (auto& i : j.m_array) {
-							s += F::Get(i) + ",";
+							s += F::f(i) + ",";
 						}
 						if (j.m_array.size() >= 1) s.pop_back();	// 末尾の "," を削除
 						return s + "]";
 					case Type::Map:
 						s = "{";
 						for (auto& i : j.m_map) {
-							s += "\"" + fEscape(i.first) + "\":" + F::Get(i.second) + ",";
+							s += "\"" + fEscape(i.first) + "\":" + F::f(i.second) + ",";
 						}
 						if (j.m_map.size() >= 1) s.pop_back();	// 末尾の "," を削除
 						return s + "}";
@@ -752,101 +831,12 @@ namespace rlib
 					return string();
 				}
 			};
-			return F::Get(*this);
+			return F::f(*this);
 		}
 	};
-
-	template <> bool Json::get<bool>() const {
-		return m_type == Type::Bool ? m_bool : false;
-	}
-	template <> double Json::get<double>() const {
-		switch (m_type) {
-		case Type::Float:	return m_float;
-		case Type::Int:		return static_cast<double>(m_int);
-		}
-		return double();
-	}
-	template <> std::intmax_t Json::get<std::intmax_t>() const {
-		switch (m_type) {
-		case Type::Float:	return std::llroundl(m_float);
-		case Type::Int:		return m_int;
-		}
-		return std::intmax_t();
-	}
-	template <> size_t Json::get<size_t>() const {
-		return static_cast<size_t>(get<std::intmax_t>());
-	}
-	template <> int Json::get<int>() const {
-		return static_cast<int>(get<std::intmax_t>());
-	}
-	template <> std::string Json::get<std::string>() const {
-		return m_type == Type::String ? m_string : std::string();
-	}
-
-	Json& Json::at(const Pointer& pointer) noexcept(false) {
-		const auto tokens = [&] {
-			using namespace std;
-			if (pointer.text.empty()) return decltype(m_array)();
-			const std::vector<string> tokens = [&] {
-				static const regex re("/");
-				const auto s = pointer.text + "/";
-				return std::vector<string>{ sregex_token_iterator(s.cbegin(), s.cend(), re, -1), sregex_token_iterator() };
-			}();
-
-			auto json = parse(			// jsonパース処理を使う
-				[&] {
-					string json = "[";
-					for (auto& s : tokens) {
-						smatch m;
-						static const regex r("^[0-9]+$");
-						if (regex_search(s, m, r)) {	// 整数なら
-							json += s + ",";
-						} else {
-							string result(s);
-							struct {
-								regex	re;
-								string	dst;
-							}static const tbl[] = {
-								{regex("~0"),	R"(~)"	},
-								{regex("~1"),	R"(/)"	},
-								{regex("\\\r"),	R"(\r)"	},
-								{regex("\\\t"),	R"(\t)"	},
-								//{regex("\\/"),R"(\/)"	},
-								{regex("\\\b"),	R"(\b)"	},
-							};
-							for (auto& i : tbl) {
-								result = regex_replace(result, i.re, i.dst, regex_constants::match_default);
-							}
-							json += "\"" + result + "\",";
-						}
-					}
-					json.pop_back();	// 末尾の "," を削除
-					return json + "]";
-				}());
-			assert(json.type() == Type::Array);
-			auto& v = json.ensureArray();
-			if (v[0].type() == Type::String && v[0].get<string>().empty()) {	// 先頭/の前の文字がある場合はNG
-				v[0].clear();
-			}
-			return v;
-		}();
-		if (tokens.empty()) return *this;										// 空文字を指定されたら自身を返す
-		if (!tokens[0].isNull()) throw std::out_of_range("invalid key");		// 先頭/の前の文字がある場合はNG
-		Json* p = this;
-		for (size_t i = 1; i < tokens.size(); i++) {
-			auto& j = tokens[i];
-			switch (j.type()) {
-			case Type::Int:
-				p = &(p->at(j.get<size_t>()));
-				break;
-			case Type::String:
-				p = &(p->at(j.get<std::string>()));
-				break;
-			default:
-				throw std::out_of_range("invalid key");
-			}
-		}
-		return *p;
-	}
-
+	template <class T> const JsonT<T>					JsonT<T>::m_emptyJson;
+	template <class T> const std::string				JsonT<T>::m_emptyString;
+	template <class T> const typename JsonT<T>::Array	JsonT<T>::m_emptyArray;
+	template <class T> const typename JsonT<T>::Map		JsonT<T>::m_emptyMap;
+	typedef JsonT<> Json;
 }

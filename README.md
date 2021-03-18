@@ -59,7 +59,9 @@ try {
     list[10]["add"] = 123;                              // Added {"add": 123} to position [10] (positions of array [2-9] are padded with null)
     bool compare = list == j["list"];                   // It is a comparison. get false.
     std::string json = list.stringify();                // get JSON string
-    rlib::Json &c = list.at(11);                        // Referenced with at() raises an exception if out of range
+    list[10].erase("add");                              // Removed associative array element ({"add": 123}) at position [10]
+    list.erase(9);                                      // Removed element (null) at position [9]
+    rlib::Json &c = list.at(10);                        // Referenced with at() raises an exception if out of range
 } catch (rlib::Json::ParseException& e) {       // perse failure
     std::cerr << e.what() << std::endl;
 } catch (std::out_of_range& e) {                // Out-of-range
