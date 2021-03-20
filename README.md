@@ -38,33 +38,35 @@ It can be used by including Json.h.
 #include "Json.h"
 
 try {
-    const rlib::Json j = rlib::Json::parse(             // Constructed from a JSON string
-        u8R"({
-            "n" : -123.456e+2,
-            "list":[
-                32,
-                "ABC"
-            ],
-            "b": true,
-            "c": null
-        })");
+    using Json = rlib::Json;
+    const Json j = Json::parse(u8R"(                    // Constructed from a JSON string
+            {                       // allows comments (JSON5)
+                "n" : -123.456e+2,
+                "list":[
+                    32,
+                    "ABC",          // allows Trailing comma (JSON5)
+                ],
+                "b": true,
+                "c": null
+            }
+        )");
     double d0 = j["n"].get<double>();                   // get -123.456e+2
     double da = j.at("n").get<double>();                // This is the description referenced by at(). (An exception will be thrown if it is out of range)
     double d1 = j["e"].get<double>();                   // get 0.0 (Since a position that does not exist is specified, the default value can be taken.)
     std::intmax_t n1 = j["n"].get<std::intmax_t>();     // get -12346 (You can take rounded integer values)
     std::string s0 = j["list"][1].get<std::string>();   // get "ABC"
-    std::string sa = j.at(rlib::Json::Pointer("/list/1")).get<std::string>();	// It is a description specified by JSON Pointer.
+    std::string sa = j.at(Json::Pointer("/list/1")).get<std::string>(); // It is a description specified by JSON Pointer.
     std::string s1 = j["ary"][9].get<std::string>();    // get empty string (Since a position that does not exist is specified, the default value can be taken.)
-    rlib::Json list = j["list"];                        // duplicate (deep copy) from "list"
+    Json list = j["list"];                              // duplicate (deep copy) from "list"
     list[10]["add"] = 123;                              // Added {"add": 123} to position [10] (positions of array [2-9] are padded with null)
     bool compare = list == j["list"];                   // It is a comparison. get false.
     std::string json = list.stringify();                // get JSON string
     list[10].erase("add");                              // Removed associative array element ({"add": 123}) at position [10]
     list.erase(9);                                      // Removed element (null) at position [9]
-    rlib::Json &c = list.at(10);                        // Referenced with at() raises an exception if out of range
-} catch (rlib::Json::ParseException& e) {       // perse failure
+    Json& c = list.at(10);                              // Referenced with at() raises an exception if out of range
+} catch (rlib::Json::ParseException& e) {               // perse failure
     std::cerr << e.what() << std::endl;
-} catch (std::out_of_range& e) {                // Out-of-range
+} catch (std::out_of_range& e) {                        // Out-of-range
     std::cerr << e.what() << std::endl;
 }
 ```

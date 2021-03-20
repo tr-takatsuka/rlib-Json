@@ -38,36 +38,39 @@ Json.h をインクルードすることで使用可です。
 #include "Json.h"
 
 try {
-    const rlib::Json j = rlib::Json::parse(             // JSON 文字列から構築
-        u8R"({
-            "n" : -123.456e+2,
-            "list":[
-                32,
-                "ABC"
-            ],
-            "b": true,
-            "c": null
-        })");
+    using Json = rlib::Json;
+    const Json j = Json::parse(u8R"(                    // JSON 文字列から構築
+            {                       // allows comments (JSON5)
+                "n" : -123.456e+2,
+                "list":[
+                    32,
+                    "ABC",          // allows Trailing comma (JSON5)
+                ],
+                "b": true,
+                "c": null
+            }
+        )");
     double d0 = j["n"].get<double>();                   // -123.456e+2 を取得
     double da = j.at("n").get<double>();                // at() で参照する記述です。（範囲外の場合に例外が発生します）
     double d1 = j["e"].get<double>();                   // 0.0 を取得 (存在しない位置を指定したのでデフォルト値が取れる)
     std::intmax_t n1 = j["n"].get<std::intmax_t>();     // -12346 を取得 (double値を四捨五入した整数値が取れます)
     std::string s0 = j["list"][1].get<std::string>();   // "ABC" を取得
-    std::string sa = j.at(rlib::Json::Pointer("/list/1")).get<std::string>();	// JSON Pointerで指定する記述です。
+    std::string sa = j.at(Json::Pointer("/list/1")).get<std::string>(); // JSON Pointerで指定する記述です。
     std::string s1 = j["ary"][9].get<std::string>();    // 空文字を取得 (存在しない位置を指定したのでデフォルト値が取れる)
-    rlib::Json list = j["list"];                        // "list"以下をコピー(複製)
+    Json list = j["list"];                              // "list"以下をコピー(複製)
     list[10]["add"] = 123;                              // [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
     bool compare = list == j["list"];                   // 比較です。false が返ります。
     std::string json = list.stringify();                // JSON 文字列を取得
     list[10].erase("add");                              // [10]の位置の連想配列の要素({"add":123})を削除
     list.erase(9);                                      // [9]の位置の要素(null)を削除
-    rlib::Json &c = list.at(10);                        // at() で参照すると範囲外の場合に例外が発生します
-} catch (rlib::Json::ParseException& e) {       // パース失敗
+    Json& c = list.at(10);                              // at() で参照すると範囲外の場合に例外が発生します
+} catch (rlib::Json::ParseException& e) {               // パース 失敗
     std::cerr << e.what() << std::endl;
-} catch (std::out_of_range& e) {                // 範囲外参照
+} catch (std::out_of_range& e) {                        // 範囲外参照
     std::cerr << e.what() << std::endl;
 }
 ```
+
 
 ## Feature and Limitations
 

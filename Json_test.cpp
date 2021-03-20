@@ -9,8 +9,6 @@
 #pragma warning(disable : 4566)
 #endif
 
-using namespace rlib;
-
 template <class CharT> std::basic_string<CharT> StringFormat(const boost::basic_format<CharT>& format) {
 	return format.str();
 }
@@ -56,7 +54,43 @@ BOOST_AUTO_TEST_CASE(json_test)
 {
 	boost::unit_test::unit_test_log.set_threshold_level(boost::unit_test::log_level::log_messages);	// ログレベル
 
+	// example
 	try {
+		using Json = rlib::Json;
+		const Json j = Json::parse(u8R"(					// JSON 文字列から構築
+				{						// allows comments (JSON5)
+					"n" : -123.456e+2,
+					"list":[
+						32,
+						"ABC",			// allows Trailing comma (JSON5)
+					],
+					"b": true,
+					"c": null
+				}
+			)");
+		double d0 = j["n"].get<double>();					// -123.456e+2 を取得
+		double da = j.at("n").get<double>();				// at() で参照する記述です。（範囲外の場合に例外が発生します）
+		double d1 = j["e"].get<double>();					// 0.0 を取得 (存在しない位置を指定したのでデフォルト値が取れる)
+		std::intmax_t n1 = j["n"].get<std::intmax_t>();		// -12346 を取得 (double値を四捨五入した整数値が取れます)
+		std::string s0 = j["list"][1].get<std::string>();	// "ABC" を取得
+		std::string sa = j.at(Json::Pointer("/list/1")).get<std::string>();	// JSON Pointerで指定する記述です。
+		std::string s1 = j["ary"][9].get<std::string>();	// 空文字を取得 (存在しない位置を指定したのでデフォルト値が取れる)
+		Json list = j["list"];								// "list"以下をコピー(複製)
+		list[10]["add"] = 123;								// [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
+		bool compare = list == j["list"];					// 比較です。false が返ります。
+		std::string json = list.stringify();				// JSON 文字列を取得
+		list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
+		list.erase(9);										// [9]の位置の要素(null)を削除
+		Json& c = list.at(10);								// at() で参照すると範囲外の場合に例外が発生します
+	} catch (rlib::Json::ParseException& e) {				// パース 失敗
+		std::cerr << e.what() << std::endl;
+	} catch (std::out_of_range& e) {						// 範囲外参照
+		std::cerr << e.what() << std::endl;
+	}
+
+	try {
+
+		using Json = rlib::Json;
 
 		{// version 表示
 			const auto v = Json::version();
@@ -65,46 +99,18 @@ BOOST_AUTO_TEST_CASE(json_test)
 				std::get<0>(v), std::get<1>(v), std::get<2>(v)));
 		}
 
-
-		try {
-			const rlib::Json j = rlib::Json::parse(				// JSON 文字列から構築
-				u8R"({
-					"n" : -123.456e+2,
-					"list":[
-						32,
-						"ABC"
-					],
-					"b": true,
-					"c": null
-				})");
-			double d0 = j["n"].get<double>();					// -123.456e+2 を取得
-			double da = j.at("n").get<double>();				// at() で参照する記述です。（範囲外の場合に例外が発生します）
-			double d1 = j["e"].get<double>();					// 0.0 を取得 (存在しない位置を指定したのでデフォルト値が取れる)
-			std::intmax_t n1 = j["n"].get<std::intmax_t>();		// -12346 を取得 (double値を四捨五入した整数値が取れます)
-			std::string s0 = j["list"][1].get<std::string>();	// "ABC" を取得
-			std::string sa = j.at(rlib::Json::Pointer("/list/1")).get<std::string>();	// JSON Pointerで指定する記述です。
-			std::string s1 = j["ary"][9].get<std::string>();	// 空文字を取得 (存在しない位置を指定したのでデフォルト値が取れる)
-			rlib::Json list = j["list"];						// "list"以下をコピー(複製)
-			list[10]["add"] = 123;								// [10]の位置に {"add":123} を 追加 ( 配列[2～9]の位置は null で埋められる)
-			bool compare = list == j["list"];					// 比較です。false が返ります。
-			std::string json = list.stringify();				// JSON 文字列を取得
-			list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
-			list.erase(9);										// [9]の位置の要素(null)を削除
-			rlib::Json& c = list.at(10);						// at() で参照すると範囲外の場合に例外が発生します
-		} catch (rlib::Json::ParseException& e) {		// パース 失敗
-			std::cerr << e.what() << std::endl;
-		} catch (std::out_of_range& e) {				// 範囲外参照
-			std::cerr << e.what() << std::endl;
-		}
-
 		{// singles
 			BOOST_TEST_MESSAGE("singles");
-			BOOST_CHECK(Json::parse(u8R"(null)").isType(Json::Type::Null));
-			BOOST_CHECK(Json::parse(u8R"(true)").get<bool>() == true);
-			BOOST_CHECK(Json::parse(u8R"(false)").get<bool>() == false);
-			BOOST_CHECK(Json::parse(u8R"("abc")").get<std::string>() == "abc");
-			BOOST_CHECK(Json::parse(u8R"(123)").get<int>() == 123);
+			BOOST_CHECK(Json::parse(R"(null)").isType(Json::Type::Null));
+			BOOST_CHECK(Json::parse(R"(true)").get<bool>() == true);
+			BOOST_CHECK(Json::parse(R"(false)").get<bool>() == false);
+			BOOST_CHECK(Json::parse(R"("abc")").get<std::string>() == "abc");
+			BOOST_CHECK(Json::parse(R"(123)").get<int>() == 123);
 			BOOST_CHECK_CLOSE(Json::parse(u8R"(456.789)").get<double>(), 456.789, 0.001);
+			BOOST_CHECK(Json::parse(R"(" ")").get<std::string>() == " ");
+			BOOST_CHECK(Json::parse(R"("	")").get<std::string>() == "\t");		// エスケープなしのタブ。とりあえず許可する。
+			BOOST_CHECK_THROW(Json::parse("\"\\\""), Json::ParseException);			// "\"
+			BOOST_CHECK_THROW(Json::parse(R"("\a")"), Json::ParseException);		// 未定義のエスケープ文字
 		}
 
 		{// key name
@@ -115,8 +121,8 @@ BOOST_AUTO_TEST_CASE(json_test)
 			BOOST_CHECK(j == Json::parse(j.stringify()));
 		}
 
-		{// key name
-			BOOST_TEST_MESSAGE("alltype");
+		{// etc
+			BOOST_TEST_MESSAGE("etc");
 			const auto j = Json::parse(
 				u8R"([						// 配列
 						123,				// 数字
@@ -132,8 +138,15 @@ BOOST_AUTO_TEST_CASE(json_test)
 							"b": 555,
 							"":"empty",		// 空文字キー
 							" ":"space",	// 空白文字キー
+							"\"":"dq",
+							"\\":"bslash",
+							"/":"slash",
+							"\b":"bs",		// バックスペース
+							"\f":"ff",		// 改ページ
+							"\n":"cr",		// CR
+							"\r":"lf",		// LF
+							"\t":"tab",		// タブ
 							"~":"tilde",
-							"/":"slash"
 						}
 					]						// 閉じる
 				)");
@@ -145,16 +158,37 @@ BOOST_AUTO_TEST_CASE(json_test)
 			BOOST_CHECK_CLOSE(j[5]["a"].get<double>(), 456.789, 0.001);
 			BOOST_CHECK(j[5][""].get<std::string>() == "empty");
 			BOOST_CHECK(j[5][" "].get<std::string>() == "space");
+			BOOST_CHECK(j[5]["\""].get<std::string>() == "dq");
+			BOOST_CHECK(j[5]["\\"].get<std::string>() == "bslash");
+			BOOST_CHECK(j[5]["/"].get<std::string>() == "slash");
+			BOOST_CHECK(j[5]["\b"].get<std::string>() == "bs");
+			BOOST_CHECK(j[5]["\f"].get<std::string>() == "ff");
+			BOOST_CHECK(j[5]["\n"].get<std::string>() == "cr");
+			BOOST_CHECK(j[5]["\r"].get<std::string>() == "lf");
+			BOOST_CHECK(j[5]["\t"].get<std::string>() == "tab");
+			BOOST_CHECK(j[5]["~"].get<std::string>() == "tilde");
 			// JSON Pointer
-			BOOST_CHECK(j.at(Json::Pointer("/5/b")).get<int>() == 555);
-			BOOST_CHECK(j.at(Json::Pointer("/5/")).get<std::string>() == "empty");
-			BOOST_CHECK(j.at(Json::Pointer("/5/ ")).get<std::string>() == "space");
-			BOOST_CHECK(j.at(Json::Pointer("/5/~0")).get<std::string>() == "tilde");
-			BOOST_CHECK(j.at(Json::Pointer("/5/~1")).get<std::string>() == "slash");
+			BOOST_CHECK(j.at(Json::Pointer("")) == j);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/b)")).get<int>() == 555);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/)")).get<std::string>() == "empty");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/ )")).get<std::string>() == "space");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\")")).get<std::string>() == "dq");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\\)")).get<std::string>() == "bslash");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/~1)")).get<std::string>() == "slash");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\b)")).get<std::string>() == "bs");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\f)")).get<std::string>() == "ff");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\n)")).get<std::string>() == "cr");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\r)")).get<std::string>() == "lf");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\t)")).get<std::string>() == "tab");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/5/~0)")).get<std::string>() == "tilde");
+			BOOST_CHECK_THROW(j.at(Json::Pointer("/")), std::out_of_range);
 			BOOST_CHECK_THROW(j.at(Json::Pointer("/5/b/")), std::out_of_range);
 			BOOST_CHECK_THROW(j.at(Json::Pointer("/10/b/")), std::out_of_range);
 			BOOST_CHECK_THROW(j.at(Json::Pointer("e/10/b/")), std::out_of_range);
 			BOOST_CHECK_THROW(j.at(Json::Pointer("0/10/b/")), std::out_of_range);
+			BOOST_CHECK_THROW(j.at(Json::Pointer(R"(/5/~)")), std::out_of_range);
+			// stringify
+			BOOST_CHECK(j == Json::parse(j.stringify()));
 		}
 
 		BOOST_TEST_MESSAGE("float");
@@ -211,6 +245,33 @@ BOOST_AUTO_TEST_CASE(json_test)
 				, Json::ParseException);
 		}
 
+		{// trailing comma 末尾のカンマ
+			BOOST_TEST_MESSAGE("trailing comma");
+			std::string s =
+				u8R"([
+					{
+						"a":1,
+						"b":2,
+					},
+					[
+						3,
+						4,
+					],
+				])";
+			const auto j = Json::parse(s);
+			BOOST_CHECK(j[0]["b"].get<int>() == 2);
+			BOOST_CHECK(j[0].get<Json::Map>().size() == 2);
+			BOOST_CHECK(j[1][1].get<int>() == 4);
+			BOOST_CHECK(j[1].get<Json::Array>().size() == 2);
+			BOOST_CHECK(j.get<Json::Array>().size() == 2);
+			BOOST_CHECK_THROW(Json::parse(s,
+				[] {
+					Json::ParseOptions opt;
+					opt.trailingComma = false;
+					return opt;
+				}()), Json::ParseException);
+		}
+
 		{// サロゲートペア
 			BOOST_TEST_MESSAGE("surrogate pair");
 			const auto j = Json::parse(u8R"(
@@ -232,10 +293,18 @@ BOOST_AUTO_TEST_CASE(json_test)
 					]
 				)");
 			const auto json = j.stringify();
-			const auto j2 = Json::parse(json);
+			const auto j2 = Json::parse(json,
+				[] {
+					Json::ParseOptions opt;
+					opt.comment = false;
+					opt.trailingComma = false;
+					return opt;
+				}());
 			BOOST_CHECK(j == j2);
 		}
-
+	} catch (std::exception& e) {				// パース 失敗
+		std::cerr << e.what() << std::endl;
+		BOOST_FAIL(e.what());
 	} catch (...) {
 		BOOST_FAIL("unknown");
 	}
