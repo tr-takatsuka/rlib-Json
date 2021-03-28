@@ -54,11 +54,18 @@ BOOST_AUTO_TEST_CASE(json_test)
 {
 	boost::unit_test::unit_test_log.set_threshold_level(boost::unit_test::log_level::log_messages);	// ログレベル
 
+	{// version 表示
+		const auto v = rlib::Json::version();
+		BOOST_TEST_MESSAGE(StringFormat("rlib::Json version %d.%d.%d",
+			// v));
+			std::get<0>(v), std::get<1>(v), std::get<2>(v)));
+	}
+
 	// example
 	try {
 		using Json = rlib::Json;
-		const Json j = Json::parse(u8R"(					// JSON 文字列から構築
-			{						// allows comments (JSON5)
+		const Json j = Json::parse(							// JSON 文字列から構築
+			u8R"({					// allows comments (JSON5)
 				"n" : -123.456e+2,
 				"list":[
 					32,
@@ -80,22 +87,75 @@ BOOST_AUTO_TEST_CASE(json_test)
 		std::string json = list.stringify();				// JSON 文字列を取得
 		list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
 		list.erase(9);										// [9]の位置の要素(null)を削除
-		Json& c = list.at(10);								// at() で参照すると範囲外の場合に例外が発生します
+		const Json j1 = Json::Map{							// 初期化子リストでの構築です
+			{"a", 123},										//	{	"a": 123,
+			{"b", Json::Array{456, "ABC", 0.5}},			//		"b": [456, "ABC", 0.5],
+			{"c", Json::Map{								//		"c": {
+				{"d", true},								//			"d": true,
+				{"e", nullptr},								//			"e": null
+			}},												//		}
+		};													//	}
+		std::map<Json, int> map{ {j,0},{j1,1} };			// std::map, set などのキーにすることが可能です
+		const Json& c = j1.at("f");							// at() で参照すると範囲外の場合に例外が発生します
 	} catch (rlib::Json::ParseException& e) {				// パース 失敗
 		std::cerr << e.what() << std::endl;
 	} catch (std::out_of_range& e) {						// 範囲外参照
 		std::cerr << e.what() << std::endl;
 	}
 
-	try {
 
+
+	try {
 		using Json = rlib::Json;
 
-		{// version 表示
-			const auto v = Json::version();
-			BOOST_TEST_MESSAGE(StringFormat("rlib::Json version %d.%d.%d",
-				// v));
-				std::get<0>(v), std::get<1>(v), std::get<2>(v)));
+		{// set type
+			BOOST_TEST_MESSAGE("set type");
+			std::string str0("a");
+			const std::string str1("a");
+			bool b0 = true;
+			const bool b1 = false;
+			float f0 = 0;
+			const float f1 = 1;
+			double d0 = 0;
+			const double d1 = 1;
+			char c0 = 0;
+			const char c1 = 1;
+			unsigned char uc0 = 0;
+			const unsigned char uc1 = 1;
+			int i0 = 0;
+			const int i1 = 1;
+			unsigned int ui0 = 0;
+			const unsigned int ui1 = 1;
+			short s0 = 0;
+			const short s1 = 1;
+			unsigned short us0 = 0;
+			const unsigned short us1 = 1;
+			long long ll0 = 0;
+			const long long ll1 = 1;
+			unsigned long long  ull0 = 0;
+			const unsigned long long  ull1 = 1;
+			Json j = Json::Map{
+				{"null", Json::Array{nullptr}},
+				{"bool", Json::Array{true, false, b0, b1}},
+				{"string", Json::Array{"a", str0, str1}},
+				{"string2", {"a","b"}},
+				{"float", Json::Array{0.0, 1.0f, -123.456e+2, f0, f1, d0, d1}},
+				{"int", Json::Array{
+					0, -1, 123,
+					c0,c1,uc0,uc1,
+					i0,i1,ui0,ui1,
+					s0,s1,us0,us1,
+					ll0,ll1,ull0,ull1,
+				}},
+				{"int2", {1,2,3,4}},		// std::initializer_list
+			};
+			for (auto& i : j["null"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Null));
+			for (auto& i : j["bool"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Bool));
+			for (auto& i : j["string"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::String));
+			for (auto& i : j["string2"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::String));
+			for (auto& i : j["float"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Float));
+			for (auto& i : j["int"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Int));
+			for (auto& i : j["int2"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Int));
 		}
 
 		{// singles
@@ -187,6 +247,49 @@ BOOST_AUTO_TEST_CASE(json_test)
 			BOOST_CHECK_THROW(j.at(Json::Pointer("0/10/b/")), std::out_of_range);
 			BOOST_CHECK_THROW(j.at(Json::Pointer(R"(/5/~)")), std::out_of_range);
 			// stringify
+			BOOST_CHECK(j == Json::parse(j.stringify()));
+		}
+
+		{// etc2
+			BOOST_TEST_MESSAGE("etc2");
+			const auto j = Json::parse(
+				u8R"({
+						"123": true			// 数字だけの文字列
+					}
+				)");
+			BOOST_CHECK(j["123"].get<bool>());
+			BOOST_CHECK(j.at(Json::Pointer(R"(/123)")).get<bool>());
+			// stringify
+			BOOST_CHECK(j == Json::parse(j.stringify()));
+		}
+
+
+		{// JSON Pointer
+			BOOST_TEST_MESSAGE("JSON Pointer");
+			const auto j = Json::parse(u8R"(
+				{
+					"foo": ["bar", "baz"] ,
+					"" : 0,
+					"a/b" : 1,
+					"c%d" : 2,
+					"e^f" : 3,
+					"g|h" : 4,
+					"i\\j" : 5,
+					"k\"l" : 6,
+					" " : 7,
+					"m~n" : 8
+				})");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/foo)")) == Json::parse(u8R"(["bar", "baz"])"));
+			BOOST_CHECK(j.at(Json::Pointer(R"(/foo/0)")).get<std::string>() == "bar");
+			BOOST_CHECK(j.at(Json::Pointer(R"(/)")).get<int>() == 0);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/a~1b)")).get<int>() == 1);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/c%d)")).get<int>() == 2);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/e^f)")).get<int>() == 3);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/g|h)")).get<int>() == 4);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/i\\j)")).get<int>() == 5);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/k\"l)")).get<int>() == 6);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/ )")).get<int>() == 7);
+			BOOST_CHECK(j.at(Json::Pointer(R"(/m~0n)")).get<int>() == 8);
 			BOOST_CHECK(j == Json::parse(j.stringify()));
 		}
 
