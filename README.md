@@ -4,19 +4,19 @@
 
 ## Description
 
-JSON parser. Implementation in C++.
+JSON parser. Implementation in C++11.
 
 + It is a data structure class that conforms to the JSON specification, with parse and output (stringify) functions added.
-+ Works with one header file.
-+ It can be built with C++11. It does not depend on external libraries such as boost.
++ Works with one header file. It does not depend on external libraries such as boost.
 + It implements some specifications of JSON5. (Can be disabled as an option)
   + You can parse JSON with comments. 
   + Allows Trailing commas (sometimes called "final commas").
 + Implements JSON Pointer.
++ It can be built with an initializer list.
 + It is designed so that exceptions do not occur when referencing or editing. (Excluding the at() function)
   + For out-of-range reads, the default value is taken, and for writes, an element is created.
-+ Unlike javascript, numbers are divided into floating point numbers (double) and integers (std :: intmax_t).
-+ Input / output is supported only for std::string (UTF-8).
++ Unlike javascript, numbers are divided into floating point numbers (double) and integers (std::intmax_t).
++ Input/output is supported only for std::string (UTF-8).
   + It does not support the parsing process of stream input.
 
 
@@ -40,8 +40,8 @@ It can be used by including Json.h.
 
 try {
     using Json = rlib::Json;
-    const Json j = Json::parse(u8R"(                    // JSON 文字列から構築
-        {                       // allows comments (JSON5)
+    const Json j = Json::parse(                         // Build with a JSON string
+        u8R"({                  // allows comments (JSON5)
             "n" : -123.456e+2,
             "list":[
                 32,
@@ -63,7 +63,16 @@ try {
     std::string json = list.stringify();                // get JSON string
     list[10].erase("add");                              // Removed associative array element ({"add": 123}) at position [10]
     list.erase(9);                                      // Removed element (null) at position [9]
-    Json& c = list.at(10);                              // Referenced with at() raises an exception if out of range
+    const Json j1 = Json::Map{                          // Build with initializer list
+        {"a", 123},                                     //  {   "a": 123,
+        {"b", Json::Array{456, "ABC", 0.5}},            //      "b": [456, "ABC", 0.5],
+        {"c", Json::Map{                                //      "c": {
+            {"d", true},                                //          "d": true,
+            {"e", nullptr},                             //          "e": null
+        }},                                             //      }
+    };                                                  //  }
+    std::map<Json, int> map{ {j,0},{j1,1} };            // Can be keys such as std::map, set
+    const Json& c = j1.at("f");                         // Referenced with at() raises an exception if out of range
 } catch (rlib::Json::ParseException& e) {       // perse failure
     std::cerr << e.what() << std::endl;
 } catch (std::out_of_range& e) {                // Out-of-range

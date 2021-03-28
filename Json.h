@@ -1,15 +1,15 @@
-﻿// rlib-Json
-// This software is released under the CC0, https://github.com/tr-takatsuka/rlib-Json
+﻿// rlib-Json https://github.com/tr-takatsuka/rlib-Json
+// This software is released under the CC0.
 /*
-JSON パーサーです。C++での実装です。
+JSON パーサーです。C++11での実装です。
 
 + JSON 仕様に沿ったデータ構造クラスに、パース(parse)と出力(stringify)機能を付加したものです。
-+ 1つのヘッダーファイルで動作します。
-+ C++11 でビルド可です。boost などの外部ライブラリには依存していません。
++ 1つのヘッダーファイルで動作します。boost などの外部ライブラリには依存していません。
 + JSON5 の一部仕様を実装しています。(オプションで無効に出来ます)
   + コメント付きJSONをパース可能です。
   + 末尾のカンマ(最後のカンマ)を許可します。
 + JSON Pointer を実装しています。
++ 初期化子リストでの構築が可能です。
 + 参照や編集等で例外は発生しない設計です。( at() 関数を除く)
   + 範囲外の読み込みはデフォルト値が取得され、書き込みの場合は要素を作成します。
 + javascript と違い、数値は浮動小数点数(double)と整数(std::intmax_t)に区別しています。
@@ -19,8 +19,8 @@ JSON パーサーです。C++での実装です。
 ・使い方例
 	try {
 		using Json = rlib::Json;
-		const Json j = Json::parse(u8R"(					// JSON 文字列から構築
-			{						// allows comments (JSON5)
+		const Json j = Json::parse(							// JSON 文字列から構築
+			u8R"({					// allows comments (JSON5)
 				"n" : -123.456e+2,
 				"list":[
 					32,
@@ -42,7 +42,16 @@ JSON パーサーです。C++での実装です。
 		std::string json = list.stringify();				// JSON 文字列を取得
 		list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
 		list.erase(9);										// [9]の位置の要素(null)を削除
-		Json& c = list.at(10);								// at() で参照すると範囲外の場合に例外が発生します
+		const Json j1 = Json::Map{							// 初期化子リストでの構築です
+			{"a", 123},										//	{	"a": 123,
+			{"b", Json::Array{456, "ABC", 0.5}},			//		"b": [456, "ABC", 0.5],
+			{"c", Json::Map{								//		"c": {
+				{"d", true},								//			"d": true,
+				{"e", nullptr},								//			"e": null
+			}},												//		}
+		};													//	}
+		std::map<Json, int> map{ {j,0},{j1,1} };			// std::map, set などのキーにすることが可能です
+		const Json& c = j1.at("f");							// at() で参照すると範囲外の場合に例外が発生します
 	} catch (rlib::Json::ParseException& e) {				// パース 失敗
 		std::cerr << e.what() << std::endl;
 	} catch (std::out_of_range& e) {						// 範囲外参照
@@ -57,6 +66,7 @@ JSON パーサーです。C++での実装です。
 #include <functional>
 #include <map>
 #include <regex>
+#include <sstream>
 #include <tuple>
 #include <vector>
 
@@ -67,7 +77,7 @@ namespace rlib
 	public:
 		// version (major, minor, patch)
 		static std::tuple<int, int, int> version() {
-			return std::make_tuple(1, 0, 0);	// 1.0.0
+			return std::make_tuple(1, 0, 1);	// 1.0.1
 		}
 		enum class Type {
 			Null,		// null (デフォルト)
@@ -98,40 +108,34 @@ namespace rlib
 		JsonT()
 			:m_type(Type::Null)
 		{}
-		explicit JsonT(std::nullptr_t)
+		JsonT(std::nullptr_t)
 			:m_type(Type::Null)
 		{}
-		explicit JsonT(bool b)
-			:m_type(Type::Bool), m_bool(b)
+		template<class U> JsonT(U n, typename std::enable_if<std::is_same<U, bool>::value>::type * = nullptr)
+			: m_type(Type::Bool), m_bool(n)
 		{}
-		explicit JsonT(double n)
-			:m_type(Type::Float), m_float(n)
+		template<class U> JsonT(U s,typename std::enable_if<std::is_floating_point<U>::value>::type* = nullptr)
+			: m_type(Type::Float), m_float(s)
 		{}
-		explicit JsonT(int n)
-			:m_type(Type::Int), m_int(n)
+		template<class U> JsonT(U n, typename std::enable_if<std::is_integral<U>::value && !std::is_same<U, bool>::value>::type* = nullptr)
+			: m_type(Type::Int), m_int(n)
 		{}
-		explicit JsonT(std::intmax_t n)
-			:m_type(Type::Int), m_int(n)
+		template<class U> JsonT(U s, typename std::enable_if<std::is_same<typename std::remove_reference<U>::type, std::string>::value || std::is_same<U, const char*>::value>::type* = nullptr)
+			: m_type(Type::String), m_string(std::move(s))
 		{}
-		explicit JsonT(const char* p)
-			:m_type(Type::String), m_string(p)
-		{}
-		explicit JsonT(const decltype(m_string)& s)
-			:m_type(Type::String), m_string(s)
-		{}
-		explicit JsonT(decltype(m_string) && s)
-			:m_type(Type::String), m_string(std::move(s))
-		{}
-		explicit JsonT(const Array& s)
+		JsonT(const Array& s)
 			:m_type(Type::Array), m_array(s)
 		{}
-		explicit JsonT(Array&& s)
+		JsonT(Array&& s)
 			:m_type(Type::Array), m_array(std::move(s))
 		{}
-		explicit JsonT(const Map& s)
+		template<class U> JsonT(const std::initializer_list<U>& s)
+			:m_type(Type::Array), m_array(s.begin(), s.end())
+		{}
+		JsonT(const Map& s)
 			:m_type(Type::Map), m_map(s)
 		{}
-		explicit JsonT(Map&& s)
+		JsonT(Map&& s)
 			:m_type(Type::Map), m_map(std::move(s))
 		{}
 		JsonT(const JsonT& s)
@@ -173,9 +177,33 @@ namespace rlib
 			}
 			return false;
 		}
-
 		bool operator!=(const JsonT& s) const {
 			return !(*this == s);
+		}
+
+		bool operator<(const JsonT& s) const {
+			if (m_type == s.m_type) {
+				switch (m_type) {
+				case Type::Null:	return false;
+				case Type::Bool:	return m_bool < s.m_bool;
+				case Type::Float:	return m_float < s.m_float;
+				case Type::Int:		return m_int < s.m_int;
+				case Type::String:	return m_string < s.m_string;
+				case Type::Array:	return m_array < s.m_array;
+				case Type::Map:		return m_map < s.m_map;
+				}
+				assert(false);
+			}
+			return m_type < s.m_type;
+		}
+		bool operator<=(const JsonT& s) const {
+			return !(s < *this);
+		}
+		bool operator>(const JsonT& s) const {
+			return s < *this;
+		}
+		bool operator>=(const JsonT& s) const {
+			return !(*this < s);
 		}
 
 		template <typename S> JsonT& operator=(const S& s) {
@@ -347,9 +375,58 @@ namespace rlib
 
 		// JSON Pointer
 		struct Pointer {
-			const std::string text;
-			Pointer(const std::string& s) :text(s) {}
-			Pointer(std::string&& s) :text(std::move(s)) {}
+			const std::string& text;	// 使わないが参照用に残しておく
+			const std::pair<bool, std::vector<std::string>> tokens;
+			Pointer(const std::string& s)
+				: text(s)
+				, tokens(
+					[&s]()->decltype(tokens) {
+						using namespace std;
+						try {
+							if (s.empty()) return { true,{} };
+							const auto tokens = [&] {					// "/" で分割したトークン配列
+								static const regex re("/");
+								const auto t = s + "/";					// 末尾の情報も必要なのでセパレータ追加
+								return vector<string>{ sregex_token_iterator(t.cbegin(), t.cend(), re, -1), sregex_token_iterator() };
+							}();
+							auto j = parse(							// jsonパース処理を使う
+								[&tokens] {
+									string json;
+									for (auto& s : tokens) {
+										string r;
+										for (auto it = s.cbegin(); it != s.cend();) {
+											smatch m;
+											static const regex re(R"(\~.?)");
+											if (!regex_search(it, s.cend(), m, re)) {		// "~" escape
+												r += string(it, s.cend());
+												break;
+											}
+											static const map<string, string> mapReplace{
+												{ R"(~0)",	R"(~)"},
+												{ R"(~1)",	R"(\/)"},
+											};
+											const auto i = mapReplace.find(m[0].str());
+											if (i == mapReplace.end()) throw std::out_of_range("invalid key");
+											r += string(it, m[0].first) + i->second;
+											it = m[0].second;
+										}
+										json += "\"" + r + "\",";
+									}
+									return "[" + json + "]";
+								}());
+							if (!j.isType(Type::Array) || j.template get<Array>().size() <= 0) throw std::out_of_range("invalid key");	// failsae
+							const auto& a = j.template get<Array>();
+							if (!a[0].template get<string>().empty()) throw std::out_of_range("invalid key");	// 先頭の/の前に文字がある場合はNG
+							vector<string> v;
+							for (size_t i = 1; i < a.size(); i++) {
+								v.push_back(a[i].template get<string>());
+							}
+							return { true,v };
+						} catch (...) {
+						}
+						return { false,{} };
+					}())
+			{}
 		};
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
@@ -369,60 +446,32 @@ namespace rlib
 		}
 		JsonT& at(const Pointer& pointer) noexcept(false) {
 			using namespace std;
-			const auto tokens = [&] {		// トークン列挙
-				if (pointer.text.empty()) return decltype(m_array)();
-				const auto tokens = [&] {					// "/" で分割したトークン配列
-					static const regex re("/");
-					const auto s = pointer.text + "/";		// 末尾の情報も必要なのでセパレータ追加
-					return vector<string>{ sregex_token_iterator(s.cbegin(), s.cend(), re, -1), sregex_token_iterator() };
-				}();
-				auto json = parse(			// jsonパース処理を使う
-					[&] {
-						string json;
-						for (auto& s : tokens) {
+			if (!pointer.tokens.first) throw std::out_of_range("invalid key");
+			auto* p = this;
+			try {
+				for (const auto& s : pointer.tokens.second) {
+					switch (p->type()) {
+					case Type::Array:
+						{
 							smatch m;
 							static const regex re("^[0-9]+$");
-							if (regex_search(s, m, re)) {	// 整数なら
-								json += s + ",";
-							} else {
-								string r;
-								for (auto it = s.cbegin(); it != s.cend();) {
-									static const regex re(R"(\~.?)");
-									if (!regex_search(it, s.cend(), m, re)) {		// "~" escape
-										r += string(it, s.cend());
-										break;
-									}
-									static const map<string, string> mapReplace{
-										{ R"(~0)",	R"(~)"},
-										{ R"(~1)",	R"(\/)"},
-									};
-									const auto i = mapReplace.find(m[0].str());
-									if (i == mapReplace.end()) throw std::out_of_range("invalid key");
-									r += string(it, m[0].first) + i->second;
-									it = m[0].second;
-								}
-								json += "\"" + r + "\",";
-							}
+							if (!regex_search(s, m, re)) throw std::out_of_range("invalid key");	// 整数以外はthrow
+							const auto n = std::stoull(s);
+							if (n > (std::numeric_limits<size_t>::max)()) throw std::out_of_range("invalid key");
+							p = &(p->at(static_cast<size_t>(n)));
 						}
-						return "[" + json + "]";
-					}());
-				if (!json.isType(Type::Array) || json.template get<Array>().size() <= 0) {	// failsae
-					throw std::out_of_range("invalid key");
+						break;
+					case Type::Map:
+						p = &(p->at(s));
+						break;
+					default:
+						throw std::out_of_range("invalid key");
+					}
 				}
-				auto& v = json.ensureArray();
-				if (!v[0].isType(Type::String) || !v[0].template get<string>().empty()) {	// 先頭の/の前に文字がある場合はNG
-					throw std::out_of_range("invalid key");
-				}
-				v.erase(v.begin());
-				return v;
-			}();
-			auto* p = this;
-			for (const auto& i : tokens) {
-				switch (i.type()) {
-				case Type::Int:		p = &(p->at(i.template get<int>()));	break;
-				case Type::String:	p = &(p->at(i.template get<string>()));	break;
-				default:	throw std::out_of_range("invalid key");
-				}
+			} catch (std::out_of_range&) {
+				throw;
+			} catch (...) {
+				throw std::out_of_range("invalid key");
 			}
 			return *p;
 		}
@@ -638,7 +687,7 @@ namespace rlib
 							state.flags.end = 3;						// 配列終了
 						}},
 
-						{ "]", [](State& state) {		// 配列終了
+						{"]", [](State& state) {		// 配列終了
 							auto& parent = **state.parents.rbegin();
 							if (!parent.isType(Type::Array)) throw ParseException("", state.json, state.it);
 							state.setEnd();
@@ -774,6 +823,11 @@ namespace rlib
 
 		// JSON文字列を出力
 		std::string stringify() const {
+			std::stringstream ss;
+			ss << *this;
+			return ss.str();
+		}
+		friend std::ostream& operator<<(std::ostream& os, const JsonT& json) {
 			using namespace std;
 			struct F {
 				static pair<regex, vector<string>> getReplaceStringRegex(const vector<pair<string, string>>& t) {
@@ -821,40 +875,49 @@ namespace rlib
 					return replaceString(s, rr);
 				};
 
-				static string f(const JsonT& j) {
-					string s;
+				static void f(std::ostream& os, const JsonT& j) {
 					switch (j.type()) {
 					case Type::Null:
-						return "null";
+						os << "null";
+						break;
 					case Type::Bool:
-						return j.m_bool ? "true" : "false";
+						os << std::boolalpha << j.m_bool;
+						break;
 					case Type::Float:
-						return to_string(j.m_float);
+						os << j.m_float;
+						break;
 					case Type::Int:
-						return to_string(j.m_int);
+						os << j.m_int;
+						break;
 					case Type::String:
-						return "\"" + escape(j.m_string) + "\"";
+						os << "\"" + escape(j.m_string) + "\"";
+						break;
 					case Type::Array:
-						s = "[";
-						for (auto& i : j.m_array) {
-							s += F::f(i) + ",";
+						os << "[";
+						for (auto it = j.m_array.cbegin(); it != j.m_array.cend(); it++) {
+							if (it != j.m_array.cbegin()) os << ",";
+							F::f(os, *it);
 						}
-						if (j.m_array.size() >= 1) s.pop_back();	// 末尾の "," を削除
-						return s + "]";
+						os << "]";
+						break;
 					case Type::Map:
-						s = "{";
-						for (auto& i : j.m_map) {
-							s += "\"" + escape(i.first) + "\":" + F::f(i.second) + ",";
+						os << "{";
+						for (auto it = j.m_map.cbegin(); it != j.m_map.cend(); it++) {
+							if (it != j.m_map.cbegin()) os << ",";
+							os << "\"" + escape(it->first) + "\":";
+							F::f(os, it->second);
 						}
-						if (j.m_map.size() >= 1) s.pop_back();	// 末尾の "," を削除
-						return s + "}";
+						os << "}";
+						break;
+					default:
+						assert(false);
 					}
-					assert(false);
-					return string();
 				}
 			};
-			return F::f(*this);
+			F::f(os, json);
+			return os;
 		}
+
 	};
 	template <class T> const JsonT<T>					JsonT<T>::m_emptyJson;
 	template <class T> const std::string				JsonT<T>::m_emptyString;

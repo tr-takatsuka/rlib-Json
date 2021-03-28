@@ -1,18 +1,18 @@
 # JSON パーサー
 
-[英語](/README.md)
+[ENGLISH](/README.md)
 
 ## Description
 
-JSON パーサーです。C++での実装です。
+JSON パーサーです。C++11での実装です。
 
 + JSON 仕様に沿ったデータ構造クラスに、パース(parse)と出力(stringify)機能を付加したものです。
-+ 1つのヘッダーファイルで動作します。
-+ C++11 でビルド可です。boost などの外部ライブラリには依存していません。
++ 1つのヘッダーファイルで動作します。boost などの外部ライブラリには依存していません。
 + JSON5 の一部仕様を実装しています。(オプションで無効に出来ます)
   + コメント付きJSONをパース可能です。
   + 末尾のカンマ(最後のカンマ)を許可します。
 + JSON Pointer を実装しています。
++ 初期化子リストでの構築が可能です。
 + 参照や編集等で例外は発生しない設計です。( at() 関数を除く)
   + 範囲外の読み込みはデフォルト値が取得され、書き込みの場合は要素を作成します。
 + javascript と違い、数値は浮動小数点数(double)と整数(std::intmax_t)に区別しています。
@@ -40,8 +40,8 @@ Json.h をインクルードすることで使用可です。
 
 try {
     using Json = rlib::Json;
-    const Json j = Json::parse(u8R"(                    // JSON 文字列から構築
-        {                       // allows comments (JSON5)
+    const Json j = Json::parse(                         // JSON 文字列から構築
+        u8R"({                  // allows comments (JSON5)
             "n" : -123.456e+2,
             "list":[
                 32,
@@ -63,10 +63,19 @@ try {
     std::string json = list.stringify();                // JSON 文字列を取得
     list[10].erase("add");                              // [10]の位置の連想配列の要素({"add":123})を削除
     list.erase(9);                                      // [9]の位置の要素(null)を削除
-    Json& c = list.at(10);                              // at() で参照すると範囲外の場合に例外が発生します
-} catch (rlib::Json::ParseException& e) {       // パース失敗
+    const Json j1 = Json::Map{                          // 初期化子リストでの構築です
+        {"a", 123},                                     //  {   "a": 123,
+        {"b", Json::Array{456, "ABC", 0.5}},            //      "b": [456, "ABC", 0.5],
+        {"c", Json::Map{                                //      "c": {
+            {"d", true},                                //          "d": true,
+            {"e", nullptr},                             //          "e": null
+        }},                                             //      }
+    };                                                  //  }
+    std::map<Json, int> map{ {j,0},{j1,1} };            // std::map, set などのキーにすることが可能です
+    const Json& c = j1.at("f");                         // at() で参照すると範囲外の場合に例外が発生します
+} catch (rlib::Json::ParseException& e) {               // パース 失敗
     std::cerr << e.what() << std::endl;
-} catch (std::out_of_range& e) {                // 範囲外参照
+} catch (std::out_of_range& e) {                        // 範囲外参照
     std::cerr << e.what() << std::endl;
 }
 ```
