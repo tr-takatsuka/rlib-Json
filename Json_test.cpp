@@ -16,7 +16,7 @@ template <class CharT, class Head, class... Tail> std::basic_string<CharT> Strin
 #if 0
 	try {
 		using HeadT = std::remove_const_t<Head>;
-		if constexpr(std::is_same_v<HeadT, ATL::CStringA> || std::is_same_v<HeadT, ATL::CStringW>) {
+		if constexpr (std::is_same_v<HeadT, ATL::CStringA> || std::is_same_v<HeadT, ATL::CStringW>) {
 			return StringFormat<CharT>(format % std::basic_string<CharT>(head.GetString()), tail...);
 		}
 	} catch (...) {
@@ -35,7 +35,7 @@ template <std::size_t I, class CharT, class... Head, class... Tail> std::basic_s
 }
 
 template <class CharT, class... Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, const std::tuple<Head...>& head, Tail&&... tail) {
-	return StringFormat<0,CharT>(format,head, tail...);
+	return StringFormat<0, CharT>(format, head, tail...);
 }
 #endif
 
@@ -248,6 +248,7 @@ BOOST_AUTO_TEST_CASE(json_test)
 			BOOST_CHECK_THROW(j.at(Json::Pointer(R"(/5/~)")), std::out_of_range);
 			// stringify
 			BOOST_CHECK(j == Json::parse(j.stringify()));
+			BOOST_CHECK(Json::parse(j.stringify()) == Json::parse(j.stringify(Json::Stringify::standard)));
 		}
 
 		{// etc2
