@@ -4,7 +4,7 @@
 
 ## Description
 
-JSON parser. Implementation in C++11.
+JSON parser implemented in C++. Supports C++11 to C++20.
 
 + It is a data structure class that conforms to the JSON specification, with parse and output (stringify) functions added.
 + Works with one header file. It does not depend on external libraries such as boost.

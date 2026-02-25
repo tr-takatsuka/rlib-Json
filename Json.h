@@ -1,7 +1,7 @@
-// rlib-Json https://github.com/tr-takatsuka/rlib-Json
+﻿// rlib-Json https://github.com/tr-takatsuka/rlib-Json
 // This software is released under the CC0.
 /*
-JSON パーサーです。C++11での実装です。
+JSON パーサーです。C++11～C++20をサポートしています。
 
 + JSON 仕様に沿ったデータ構造クラスに、パース(parse)と出力(stringify)機能を付加したものです。
 + 1つのヘッダーファイルで動作します。boost などの外部ライブラリには依存していません。
@@ -63,6 +63,7 @@ JSON パーサーです。C++11での実装です。
 #include <cassert>
 #include <cmath>
 #include <codecvt>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <regex>
@@ -77,7 +78,7 @@ namespace rlib
 	public:
 		// version (major, minor, patch)
 		static std::tuple<int, int, int> version() {
-			return std::make_tuple(1, 0, 2);	// 1.0.2
+			return std::make_tuple(1, 0, 3);	// 1.0.3
 		}
 		enum class Type {
 			Null,		// null (デフォルト)
@@ -283,6 +284,23 @@ namespace rlib
 		bool erase(const std::string& key) {
 			return m_type == Type::Map ? m_map.erase(key) > 0 : false;
 		}
+#ifdef __cpp_char8_t
+		const JsonT& operator[](const std::u8string& key) const {
+			return (*this)[std::string(reinterpret_cast<const char*>(key.data()), key.size())];
+		}
+		JsonT& operator[](const std::u8string& key) {
+			return (*this)[std::string(reinterpret_cast<const char*>(key.data()), key.size())];
+		}
+		const JsonT& at(const std::u8string& key) const noexcept(false) {
+			return this->at(std::string(reinterpret_cast<const char*>(key.data()), key.size()));
+		}
+		JsonT& at(const std::u8string& key) noexcept(false) {
+			return this->at(std::string(reinterpret_cast<const char*>(key.data()), key.size()));
+		}
+		bool erase(const std::u8string& key) {
+			return this->erase(std::string(reinterpret_cast<const char*>(key.data()), key.size()));
+		}
+#endif
 
 		// 配列を取得 (typeがArrayではない場合、Arrayに変更した上で返す。配列(vector)を直接操作したい場合に使うべし)
 		Array& ensureArray() {
@@ -364,6 +382,18 @@ namespace rlib
 		template<class U> const U& get(typename std::enable_if<std::is_same<U, std::string>::value >::type* = nullptr) const noexcept {
 			return m_type == Type::String ? m_string : m_emptyString;
 		}
+#ifdef __cpp_char8_t
+		template<class U> const U get(typename std::enable_if<std::is_same<U, std::u8string>::value >::type* = nullptr) const noexcept {
+			return m_type == Type::String
+				? std::u8string(reinterpret_cast<const char8_t*>(m_string.data()), m_string.size())
+				: std::u8string(reinterpret_cast<const char8_t*>(m_emptyString.data()), m_emptyString.size());
+		}
+		template<class U> const U get(typename std::enable_if<std::is_same<U, std::u8string_view>::value >::type* = nullptr) const noexcept {
+			return m_type == Type::String
+				? std::u8string_view(reinterpret_cast<const char8_t*>(m_string.data()), m_string.size())
+				: std::u8string_view(reinterpret_cast<const char8_t*>(m_emptyString.data()), m_emptyString.size());
+		}
+#endif
 		// 配列
 		template<class U> const U& get(typename std::enable_if<std::is_same<U, Array>::value >::type* = nullptr) const noexcept {
 			return m_type == Type::Array ? m_array : m_emptyArray;
@@ -427,6 +457,11 @@ namespace rlib
 						return { false,{} };
 					}())
 			{}
+#ifdef __cpp_char8_t
+			Pointer(const std::u8string& s)
+				: Pointer(std::string(reinterpret_cast<const char*>(s.data()), s.size()))
+			{}
+#endif
 		};
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
@@ -819,6 +854,11 @@ namespace rlib
 			}
 			return state.result;
 		}
+#ifdef __cpp_char8_t
+		static JsonT parse(const std::u8string& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
+			return parse(std::string(reinterpret_cast<const char*>(sJson.data()), sJson.size()), opt);
+		}
+#endif
 
 		// JSON文字列を出力
 		struct Stringify {
