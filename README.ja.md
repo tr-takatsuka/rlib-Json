@@ -4,7 +4,7 @@
 
 ## Description
 
-JSON パーサーです。C++11での実装です。
+JSON パーサーです。C++11～C++20をサポートしています。
 
 + JSON 仕様に沿ったデータ構造クラスに、パース(parse)と出力(stringify)機能を付加したものです。
 + 1つのヘッダーファイルで動作します。boost などの外部ライブラリには依存していません。
@@ -22,11 +22,11 @@ JSON パーサーです。C++11での実装です。
 
 ## Requirement
 
-c++11 環境で動作します。動作に必要なものは特にありません。
+c++11～C++20 環境で動作します。動作に必要なものは特にありません。
 
 以下の環境で動作確認しています。
 + linux g++
-+ windows VisualStudio 2015,2017,2019
++ windows VisualStudio 2015,2017,2019,2022,2026
 
 ## Usage
 
@@ -83,8 +83,7 @@ try {
 
 ## Feature and Limitations
 
-- BOOST.TEST を使ったテストコードも含んでいます。Json_test.cpp
-- コードのインデントはスペースではなくタブです。github では URL 末尾に "?ts=4" を付けてタブ4で参照ください。すみません。
+- - Json_test.cpp はテストコードです。テストコードには BOOST.TEST を使っていますのでご注意ください。
 
 ## Licence
 
