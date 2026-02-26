@@ -175,8 +175,11 @@ BOOST_AUTO_TEST_CASE(json_test)
 		{// key name
 			BOOST_TEST_MESSAGE("key name");
 			const auto j = Json::parse(u8R"({"!\"#$%&'()=~|{}`_?>< +-@;:[]\\,./" : "!\"#$%&'()=~|{}`_?>< +-@;:[]\\,./"})");
-			const auto s = u8R"(!"#$%&'()=~|{}`_?>< +-@;:[]\,./)";
+			const auto s = R"(!"#$%&'()=~|{}`_?>< +-@;:[]\,./)";
 			BOOST_CHECK(j[s].get<std::string>() == s);
+#ifdef __cpp_char8_t
+			BOOST_CHECK(j[s].get<std::u8string>() == reinterpret_cast<const char8_t*>(s));
+#endif
 			BOOST_CHECK(j == Json::parse(j.stringify()));
 		}
 
@@ -322,7 +325,7 @@ BOOST_AUTO_TEST_CASE(json_test)
 				(std::numeric_limits<std::intmax_t>::max)(),  (std::numeric_limits<std::intmax_t>::min)()
 			};
 			for (auto n : l) {
-				const auto s = StringFormat(u8R"(
+				const auto s = StringFormat(R"(
 						{"a" : %ld}
 					)", n);
 				auto json = Json::parse(s);
@@ -350,7 +353,11 @@ BOOST_AUTO_TEST_CASE(json_test)
 
 		{// trailing comma 末尾のカンマ
 			BOOST_TEST_MESSAGE("trailing comma");
+#ifdef __cpp_char8_t
+			std::u8string s =
+#else
 			std::string s =
+#endif
 				u8R"([
 					{
 						"a":1,
@@ -380,8 +387,8 @@ BOOST_AUTO_TEST_CASE(json_test)
 			const auto j = Json::parse(u8R"(
 					["\ud83c\udf59","かんきせん\u306f\"換気扇\""]
 				)");
-			BOOST_CHECK(j[0].get<std::string>() == u8R"(🍙)");
-			BOOST_CHECK(j[1].get<std::string>() == u8R"(かんきせんは"換気扇")");
+			BOOST_CHECK(j[0].get<std::string>() == reinterpret_cast<const char*>(u8R"(🍙)"));
+			BOOST_CHECK(j[1].get<std::string>() == reinterpret_cast<const char*>(u8R"(かんきせんは"換気扇")"));
 		}
 
 		{// stringify
