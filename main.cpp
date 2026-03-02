@@ -1,3 +1,5 @@
-﻿
-#define BOOST_TEST_MODULE
-#include <boost/test/included/unit_test.hpp>
+﻿#include "tinytest.h"
+
+int main() {
+	return rlib::TinyTest::run();
+}

@@ -65,6 +65,7 @@ JSON パーサーです。C++11～C++20をサポートしています。
 #include <codecvt>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <map>
 #include <regex>
 #include <sstream>
@@ -73,12 +74,11 @@ JSON パーサーです。C++11～C++20をサポートしています。
 
 namespace rlib
 {
-	template <class T = void> class JsonT
-	{
+	template <class T = void> class JsonT {
 	public:
 		// version (major, minor, patch)
 		static std::tuple<int, int, int> version() {
-			return std::make_tuple(1, 0, 3);	// 1.0.3
+			return std::make_tuple(1, 0, 4);
 		}
 		enum class Type {
 			Null,		// null (デフォルト)
@@ -105,6 +105,11 @@ namespace rlib
 		static const std::string	m_emptyString;
 		static const Array			m_emptyArray;
 		static const Map			m_emptyMap;
+#ifdef __cpp_lib_string_view
+		using stringtype = std::string_view;
+#else
+		using stringtype = std::string;
+#endif
 	public:
 		JsonT()
 			:m_type(Type::Null)
@@ -124,7 +129,12 @@ namespace rlib
 		template<class U> JsonT(U s, typename std::enable_if<std::is_same<typename std::remove_reference<U>::type, std::string>::value || std::is_same<U, const char*>::value>::type* = nullptr)
 			: m_type(Type::String), m_string(std::move(s))
 		{}
-#ifdef __cpp_char8_t
+#ifdef __cpp_lib_string_view
+		template<class U> JsonT(U s, typename std::enable_if<std::is_same<typename std::remove_reference<U>::type, std::string_view>::value>::type* = nullptr)
+			: m_type(Type::String), m_string(s)
+		{}
+#endif
+#ifdef __cpp_lib_char8_t
 		template<class U> JsonT(U s, typename std::enable_if<std::is_same<typename std::remove_reference<U>::type, std::u8string>::value>::type* = nullptr)
 			: m_type(Type::String), m_string(std::string(reinterpret_cast<const char*>(s.data()), s.size()))
 		{}
@@ -265,47 +275,48 @@ namespace rlib
 		}
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら空実体を返す。例外発生しない)
-		const JsonT& operator[](const std::string& key) const {
+		const JsonT& operator[](const stringtype& key) const {
 			const auto& m = get<Map>();
-			const auto i = m.find(key);
+			const auto i = m.find(std::string(key));
 			return i != m.end() ? i->second : m_emptyJson;
 		}
 
 		// 連想配列から要素(参照)を取得 (取得出来るようキーを追加する)
-		JsonT& operator[](const std::string& key) {
-			return ensureMap()[key];
+		JsonT& operator[](const stringtype& key) {
+			return ensureMap()[std::string(key)];
 		}
 
 		// 連想配列から要素を取得 (存在しないキーを指定されたら throw std::out_of_range)
-		const JsonT& at(const std::string& key) const noexcept(false) {
+		const JsonT& at(const stringtype& key) const noexcept(false) {
 			return const_cast<typename std::remove_const<typename std::remove_pointer<decltype(this)>::type>::type*>(this)->at(key);
 		}
-		JsonT& at(const std::string& key) noexcept(false) {
-			if (m_type != Type::Map) throw std::out_of_range("not map:" + key);
-			const auto i = m_map.find(key);
-			if (i == m_map.end()) throw std::out_of_range("invalid key:" + key);
+		JsonT& at(const stringtype& key) noexcept(false) {
+			if (m_type != Type::Map) throw std::out_of_range("not map:" + std::string(key));
+			const auto i = m_map.find(std::string(key));
+			if (i == m_map.end()) throw std::out_of_range("invalid key:" + std::string(key));
 			return i->second;
 		}
 
 		// 連想配列から指定のキーを削除 (存在しないキーを指定されたら何もしないでfalseを返す)
 		// 戻り値 true:削除した false:対象のキーが存在しなかった
-		bool erase(const std::string& key) {
-			return m_type == Type::Map ? m_map.erase(key) > 0 : false;
+		bool erase(const stringtype& key) {
+			return m_type == Type::Map ? m_map.erase(std::string(key)) > 0 : false;
 		}
-#ifdef __cpp_char8_t
-		const JsonT& operator[](const std::u8string& key) const {
+
+#ifdef __cpp_lib_char8_t
+		const JsonT& operator[](const std::u8string_view& key) const {
 			return (*this)[std::string(reinterpret_cast<const char*>(key.data()), key.size())];
 		}
-		JsonT& operator[](const std::u8string& key) {
+		JsonT& operator[](const std::u8string_view& key) {
 			return (*this)[std::string(reinterpret_cast<const char*>(key.data()), key.size())];
 		}
-		const JsonT& at(const std::u8string& key) const noexcept(false) {
+		const JsonT& at(const std::u8string_view& key) const noexcept(false) {
 			return this->at(std::string(reinterpret_cast<const char*>(key.data()), key.size()));
 		}
-		JsonT& at(const std::u8string& key) noexcept(false) {
+		JsonT& at(const std::u8string_view& key) noexcept(false) {
 			return this->at(std::string(reinterpret_cast<const char*>(key.data()), key.size()));
 		}
-		bool erase(const std::u8string& key) {
+		bool erase(const std::u8string_view& key) {
 			return this->erase(std::string(reinterpret_cast<const char*>(key.data()), key.size()));
 		}
 #endif
@@ -390,16 +401,11 @@ namespace rlib
 		template<class U> const U& get(typename std::enable_if<std::is_same<U, std::string>::value >::type* = nullptr) const noexcept {
 			return m_type == Type::String ? m_string : m_emptyString;
 		}
-#ifdef __cpp_char8_t
+#ifdef __cpp_lib_char8_t
 		template<class U> const U get(typename std::enable_if<std::is_same<U, std::u8string>::value >::type* = nullptr) const noexcept {
 			return m_type == Type::String
 				? std::u8string(reinterpret_cast<const char8_t*>(m_string.data()), m_string.size())
 				: std::u8string(reinterpret_cast<const char8_t*>(m_emptyString.data()), m_emptyString.size());
-		}
-		template<class U> const U get(typename std::enable_if<std::is_same<U, std::u8string_view>::value >::type* = nullptr) const noexcept {
-			return m_type == Type::String
-				? std::u8string_view(reinterpret_cast<const char8_t*>(m_string.data()), m_string.size())
-				: std::u8string_view(reinterpret_cast<const char8_t*>(m_emptyString.data()), m_emptyString.size());
 		}
 #endif
 		// 配列
@@ -413,9 +419,9 @@ namespace rlib
 
 		// JSON Pointer
 		struct Pointer {
-			const std::string& text;	// 使わないが参照用に残しておく
+			const stringtype& text;	// 使わないが参照用に残しておく
 			const std::pair<bool, std::vector<std::string>> tokens;
-			Pointer(const std::string& s)
+			explicit Pointer(const stringtype& s)
 				: text(s)
 				, tokens(
 					[&s]()->decltype(tokens) {
@@ -424,7 +430,7 @@ namespace rlib
 							if (s.empty()) return { true,{} };
 							const auto tokens = [&] {					// "/" で分割したトークン配列
 								static const std::regex re("/");
-								const auto t = s + "/";					// 末尾の情報も必要なのでセパレータ追加
+								const auto t = std::string(s) + "/";	// 末尾の情報も必要なのでセパレータ追加
 								return std::vector<string>{ std::sregex_token_iterator(t.cbegin(), t.cend(), re, -1), std::sregex_token_iterator() };
 							}();
 							auto j = parse(							// jsonパース処理を使う
@@ -465,8 +471,8 @@ namespace rlib
 						return { false,{} };
 					}())
 			{}
-#ifdef __cpp_char8_t
-			Pointer(const std::u8string& s)
+#ifdef __cpp_lib_char8_t
+			Pointer(const std::u8string_view& s)
 				: Pointer(std::string(reinterpret_cast<const char*>(s.data()), s.size()))
 			{}
 #endif
@@ -521,7 +527,7 @@ namespace rlib
 		// parse error
 		struct ParseException : public std::runtime_error {
 			const size_t position;
-			ParseException(const std::string& msg, const std::string& json, const std::string::const_iterator& it)
+			ParseException(const std::string& msg, const stringtype& json, const stringtype::const_iterator& it)
 				: std::runtime_error(msg + std::string(it, json.cend()).substr(0, 16))
 				, position(it - json.cbegin())
 			{}
@@ -538,10 +544,10 @@ namespace rlib
 		};
 
 		// JSON文字列をパース
-		static JsonT parse(const std::string& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
+		static JsonT parse(const stringtype& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
 			using std::string;
 			struct State {
-				const string& json;
+				const stringtype& json;
 				const ParseOptions& opt;
 				JsonT				result;
 				union {									// 次トークン情報
@@ -555,10 +561,10 @@ namespace rlib
 					uint16_t		all = 0;
 				}flags;
 				std::vector<JsonT*>		parents;
-				string::const_iterator	it;
-				string::const_iterator	itLineEnd;
+				stringtype::const_iterator	it;
+				stringtype::const_iterator	itLineEnd;
 
-				State(const string& s, const ParseOptions& o)
+				State(const stringtype& s, const ParseOptions& o)
 					:json(s), opt(o), parents{ &result }, it(json.cbegin())
 				{
 					flags.bBegin = true;
@@ -625,9 +631,9 @@ namespace rlib
 						break;
 					}
 
-					std::smatch m;
+					std::match_results<stringtype::const_iterator> m;
 					// 先頭の行末を取得 (VisualC++ の regex は ^ が各行の先頭にヒットしてしまうので１行単位で処理する)
-					state.itLineEnd = regex_search(state.it, state.json.cend(), m, std::regex("\n")) ? m[0].second : state.json.cend();
+					state.itLineEnd = regex_search(state.it, state.json.end(), m, std::regex("\n")) ? m[0].second : state.json.cend();
 					// 空行なら次へ
 					if (!regex_search(state.it, state.itLineEnd, m, std::regex(R"([^\s])"))) {
 						state.it = state.itLineEnd;
@@ -671,7 +677,7 @@ namespace rlib
 					static const std::map<string, std::function<void(State&)>> mapToken{
 
 						{"//", [](State& state) {		// コメント
-							std::smatch m;
+							std::match_results<stringtype::const_iterator> m;
 							if (!regex_search(state.it, state.json.cend(), m, std::regex(".*(\n|$)"))) {		// 改行まで
 								throw ParseException("", state.json, state.it);
 							}
@@ -679,7 +685,7 @@ namespace rlib
 						}},
 
 						{"/*", [](State& state) {		// コメント
-							std::smatch m;
+							std::match_results<stringtype::const_iterator> m;
 							if (!regex_search(state.it, state.json.cend(), m, std::regex(R"(\*\/)"))) {		// 閉じるまで
 								throw ParseException("", state.json, state.it);
 							}
@@ -773,7 +779,7 @@ namespace rlib
 									R"((\\.))"					"|"				// エスケープ (6)
 									R"(")"						")");
 								while (true) {
-									std::smatch m;
+									std::match_results<stringtype::const_iterator> m;
 									if (!regex_search(state.it, state.itLineEnd, m, re)) throw ParseException("", state.json, state.it);
 									state.it = m[0].second;
 									result += m[1].str();
@@ -862,8 +868,8 @@ namespace rlib
 			}
 			return state.result;
 		}
-#ifdef __cpp_char8_t
-		static JsonT parse(const std::u8string& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
+#ifdef __cpp_lib_char8_t
+		static JsonT parse(const std::u8string_view& sJson, const ParseOptions& opt = ParseOptions()) noexcept(false) {
 			return parse(std::string(reinterpret_cast<const char*>(sJson.data()), sJson.size()), opt);
 		}
 #endif

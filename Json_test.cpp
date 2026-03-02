@@ -1,64 +1,17 @@
-﻿#include <iostream>
+﻿#include "Json.h"
 
-#include <boost/test/unit_test.hpp>
-#include <boost/format.hpp>
-
-#include "Json.h"
+#include "./tinytest.h"
 
 #if defined(_MSC_VER)
 #pragma warning(disable : 4566)
 #endif
 
-template <class CharT> std::basic_string<CharT> StringFormat(const boost::basic_format<CharT>& format) {
-	return format.str();
-}
-template <class CharT, class Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, Head& head, Tail&&... tail) {
-#if 0
-	try {
-		using HeadT = std::remove_const_t<Head>;
-		if constexpr (std::is_same_v<HeadT, ATL::CStringA> || std::is_same_v<HeadT, ATL::CStringW>) {
-			return StringFormat<CharT>(format % std::basic_string<CharT>(head.GetString()), tail...);
-		}
-	} catch (...) {
-	}
-#endif
-	return StringFormat<CharT>(format % head, tail...);
-}
-
-#if 0
-template <std::size_t I, class CharT, class... Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, const std::tuple<Head...>& head, Tail&&... tail)
-{
-	if constexpr (I < sizeof...(Head)) {
-		return StringFormat<I + 1, CharT>(format % std::get<I>(head), head, tail...);
-	}
-	return StringFormat<CharT>(format, tail...);;
-}
-
-template <class CharT, class... Head, class... Tail> std::basic_string<CharT> StringFormat(boost::basic_format<CharT>& format, const std::tuple<Head...>& head, Tail&&... tail) {
-	return StringFormat<0, CharT>(format, head, tail...);
-}
-#endif
-
-template <class CharT, class... Args> std::basic_string<CharT> StringFormat(const CharT* lpszFormat, Args&&... args) {
-	boost::basic_format<CharT> format;
-	format.exceptions(boost::io::no_error_bits);  // 例外を発生させない
-	format.parse(lpszFormat);
-	return StringFormat<CharT>(format, args...);
-}
-template <class CharT, class... Args> std::basic_string<CharT> StringFormat(const std::basic_string<CharT>& s, Args&&... args) {
-	return StringFormat<CharT>(s.c_str(), args...);
-}
-
-
-BOOST_AUTO_TEST_CASE(json_test)
-{
-	boost::unit_test::unit_test_log.set_threshold_level(boost::unit_test::log_level::log_messages);	// ログレベル
+static rlib::TinyTest t("json_test", [] {
 
 	{// version 表示
 		const auto v = rlib::Json::version();
-		BOOST_TEST_MESSAGE(StringFormat("rlib::Json version %d.%d.%d",
-			// v));
-			std::get<0>(v), std::get<1>(v), std::get<2>(v)));
+		const auto s = rlib::TinyTest::format("rlib::Json version %d.%d.%d", std::get<0>(v), std::get<1>(v), std::get<2>(v));
+		TINYTEST_MESSAGE(s);
 	}
 
 	// example
@@ -103,13 +56,11 @@ BOOST_AUTO_TEST_CASE(json_test)
 		std::cerr << e.what() << std::endl;
 	}
 
-
-
 	try {
 		using Json = rlib::Json;
 
 		{// set type
-			BOOST_TEST_MESSAGE("set type");
+			TINYTEST_MESSAGE("set type");
 			std::string str0("a");
 			const std::string str1("a");
 			bool b0 = true;
@@ -149,42 +100,51 @@ BOOST_AUTO_TEST_CASE(json_test)
 				}},
 				{"int2", {1,2,3,4}},		// std::initializer_list
 			};
-			for (auto& i : j["null"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Null));
-			for (auto& i : j["bool"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Bool));
-			for (auto& i : j["string"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::String));
-			for (auto& i : j["string2"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::String));
-			for (auto& i : j["float"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Float));
-			for (auto& i : j["int"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Int));
-			for (auto& i : j["int2"].get<Json::Array>()) BOOST_CHECK(i.isType(Json::Type::Int));
+			for (auto& i : j["null"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Null));
+			for (auto& i : j["bool"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Bool));
+			for (auto& i : j["string"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::String));
+			for (auto& i : j["string2"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::String));
+			for (auto& i : j["float"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Float));
+			for (auto& i : j["int"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Int));
+			for (auto& i : j["int2"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Int));
 		}
 
 		{// singles
-			BOOST_TEST_MESSAGE("singles");
-			BOOST_CHECK(Json::parse(R"(null)").isType(Json::Type::Null));
-			BOOST_CHECK(Json::parse(R"(true)").get<bool>() == true);
-			BOOST_CHECK(Json::parse(R"(false)").get<bool>() == false);
-			BOOST_CHECK(Json::parse(R"("abc")").get<std::string>() == "abc");
-			BOOST_CHECK(Json::parse(R"(123)").get<int>() == 123);
-			BOOST_CHECK_CLOSE(Json::parse(u8R"(456.789)").get<double>(), 456.789, 0.001);
-			BOOST_CHECK(Json::parse(R"(" ")").get<std::string>() == " ");
-			BOOST_CHECK(Json::parse(R"("	")").get<std::string>() == "\t");		// エスケープなしのタブ。とりあえず許可する。
-			BOOST_CHECK_THROW(Json::parse("\"\\\""), Json::ParseException);			// "\"
-			BOOST_CHECK_THROW(Json::parse(R"("\a")"), Json::ParseException);		// 未定義のエスケープ文字
+			TINYTEST_MESSAGE("singles");
+			TINYTEST_CHECK(Json::parse(R"(null)").isType(Json::Type::Null));
+			TINYTEST_CHECK(Json::parse(R"(true)").get<bool>() == true);
+			TINYTEST_CHECK(Json::parse(R"(false)").get<bool>() == false);
+			TINYTEST_CHECK(Json::parse(R"("abc")").get<std::string>() == "abc");
+			TINYTEST_CHECK(Json::parse(R"(123)").get<int>() == 123);
+			TINYTEST_CHECK_CLOSE(Json::parse(u8R"(456.789)").get<double>(), 456.789, 0.001);
+			TINYTEST_CHECK(Json::parse(R"(" ")").get<std::string>() == " ");
+			TINYTEST_CHECK(Json::parse(R"("	")").get<std::string>() == "\t");		// エスケープなしのタブ。とりあえず許可する。
+			TINYTEST_CHECK_THROW(Json::parse("\"\\\""), Json::ParseException);			// "\"
+			TINYTEST_CHECK_THROW(Json::parse(R"("\a")"), Json::ParseException);		// 未定義のエスケープ文字
 		}
 
 		{// key name
-			BOOST_TEST_MESSAGE("key name");
+			TINYTEST_MESSAGE("key name");
 			const auto j = Json::parse(u8R"({"!\"#$%&'()=~|{}`_?>< +-@;:[]\\,./" : "!\"#$%&'()=~|{}`_?>< +-@;:[]\\,./"})");
 			const auto s = R"(!"#$%&'()=~|{}`_?>< +-@;:[]\,./)";
-			BOOST_CHECK(j[s].get<std::string>() == s);
-#ifdef __cpp_char8_t
-			BOOST_CHECK(j[s].get<std::u8string>() == reinterpret_cast<const char8_t*>(s));
+			TINYTEST_CHECK(j[s].get<std::string>() == s);
+#ifdef __cpp_lib_char8_t
+			TINYTEST_CHECK(j[s].get<std::u8string>() == reinterpret_cast<const char8_t*>(s));
 #endif
-			BOOST_CHECK(j == Json::parse(j.stringify()));
+			const std::string jsonStr = j.stringify();
+			TINYTEST_CHECK(j == Json::parse(jsonStr));
+#ifdef __cpp_lib_string_view
+			TINYTEST_CHECK(j == Json::parse(std::string_view(jsonStr)));
+#endif
+#ifdef __cpp_lib_char8_t
+			const std::u8string jsonU8(reinterpret_cast<const char8_t*>(jsonStr.data()), jsonStr.size());
+			TINYTEST_CHECK(j == Json::parse(jsonU8));
+			TINYTEST_CHECK(j == Json::parse(std::u8string_view(jsonU8)));
+#endif
 		}
 
 		{// etc
-			BOOST_TEST_MESSAGE("etc");
+			TINYTEST_MESSAGE("etc");
 			const auto j = Json::parse(
 				u8R"([						// 配列
 						123,				// 数字
@@ -212,64 +172,63 @@ BOOST_AUTO_TEST_CASE(json_test)
 						}
 					]						// 閉じる
 				)");
-			BOOST_CHECK(j[0].get<int>() == 123);
-			BOOST_CHECK(j[1].get<std::string>() == "abc");
-			BOOST_CHECK(j[2].isType(Json::Type::Null));
-			BOOST_CHECK(j[3].get<bool>() == true);
-			BOOST_CHECK(j[4].get<bool>() == false);
-			BOOST_CHECK_CLOSE(j[5]["a"].get<double>(), 456.789, 0.001);
-			BOOST_CHECK(j[5][""].get<std::string>() == "empty");
-			BOOST_CHECK(j[5][" "].get<std::string>() == "space");
-			BOOST_CHECK(j[5]["\""].get<std::string>() == "dq");
-			BOOST_CHECK(j[5]["\\"].get<std::string>() == "bslash");
-			BOOST_CHECK(j[5]["/"].get<std::string>() == "slash");
-			BOOST_CHECK(j[5]["\b"].get<std::string>() == "bs");
-			BOOST_CHECK(j[5]["\f"].get<std::string>() == "ff");
-			BOOST_CHECK(j[5]["\n"].get<std::string>() == "cr");
-			BOOST_CHECK(j[5]["\r"].get<std::string>() == "lf");
-			BOOST_CHECK(j[5]["\t"].get<std::string>() == "tab");
-			BOOST_CHECK(j[5]["~"].get<std::string>() == "tilde");
+			TINYTEST_CHECK(j[0].get<int>() == 123);
+			TINYTEST_CHECK(j[1].get<std::string>() == "abc");
+			TINYTEST_CHECK(j[2].isType(Json::Type::Null));
+			TINYTEST_CHECK(j[3].get<bool>() == true);
+			TINYTEST_CHECK(j[4].get<bool>() == false);
+			TINYTEST_CHECK_CLOSE(j[5]["a"].get<double>(), 456.789, 0.001);
+			TINYTEST_CHECK(j[5][""].get<std::string>() == "empty");
+			TINYTEST_CHECK(j[5][" "].get<std::string>() == "space");
+			TINYTEST_CHECK(j[5]["\""].get<std::string>() == "dq");
+			TINYTEST_CHECK(j[5]["\\"].get<std::string>() == "bslash");
+			TINYTEST_CHECK(j[5]["/"].get<std::string>() == "slash");
+			TINYTEST_CHECK(j[5]["\b"].get<std::string>() == "bs");
+			TINYTEST_CHECK(j[5]["\f"].get<std::string>() == "ff");
+			TINYTEST_CHECK(j[5]["\n"].get<std::string>() == "cr");
+			TINYTEST_CHECK(j[5]["\r"].get<std::string>() == "lf");
+			TINYTEST_CHECK(j[5]["\t"].get<std::string>() == "tab");
+			TINYTEST_CHECK(j[5]["~"].get<std::string>() == "tilde");
 			// JSON Pointer
-			BOOST_CHECK(j.at(Json::Pointer("")) == j);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/b)")).get<int>() == 555);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/)")).get<std::string>() == "empty");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/ )")).get<std::string>() == "space");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\")")).get<std::string>() == "dq");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\\)")).get<std::string>() == "bslash");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/~1)")).get<std::string>() == "slash");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\b)")).get<std::string>() == "bs");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\f)")).get<std::string>() == "ff");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\n)")).get<std::string>() == "cr");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\r)")).get<std::string>() == "lf");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/\t)")).get<std::string>() == "tab");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/5/~0)")).get<std::string>() == "tilde");
-			BOOST_CHECK_THROW(j.at(Json::Pointer("/")), std::out_of_range);
-			BOOST_CHECK_THROW(j.at(Json::Pointer("/5/b/")), std::out_of_range);
-			BOOST_CHECK_THROW(j.at(Json::Pointer("/10/b/")), std::out_of_range);
-			BOOST_CHECK_THROW(j.at(Json::Pointer("e/10/b/")), std::out_of_range);
-			BOOST_CHECK_THROW(j.at(Json::Pointer("0/10/b/")), std::out_of_range);
-			BOOST_CHECK_THROW(j.at(Json::Pointer(R"(/5/~)")), std::out_of_range);
+			TINYTEST_CHECK(j.at(Json::Pointer("")) == j);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/b)")).get<int>() == 555);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/)")).get<std::string>() == "empty");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/ )")).get<std::string>() == "space");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\")")).get<std::string>() == "dq");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\\)")).get<std::string>() == "bslash");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/~1)")).get<std::string>() == "slash");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\b)")).get<std::string>() == "bs");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\f)")).get<std::string>() == "ff");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\n)")).get<std::string>() == "cr");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\r)")).get<std::string>() == "lf");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/\t)")).get<std::string>() == "tab");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/5/~0)")).get<std::string>() == "tilde");
+			TINYTEST_CHECK_THROW(j.at(Json::Pointer("/")), std::out_of_range);
+			TINYTEST_CHECK_THROW(j.at(Json::Pointer("/5/b/")), std::out_of_range);
+			TINYTEST_CHECK_THROW(j.at(Json::Pointer("/10/b/")), std::out_of_range);
+			TINYTEST_CHECK_THROW(j.at(Json::Pointer("e/10/b/")), std::out_of_range);
+			TINYTEST_CHECK_THROW(j.at(Json::Pointer("0/10/b/")), std::out_of_range);
+			TINYTEST_CHECK_THROW(j.at(Json::Pointer(R"(/5/~)")), std::out_of_range);
 			// stringify
-			BOOST_CHECK(j == Json::parse(j.stringify()));
-			BOOST_CHECK(Json::parse(j.stringify()) == Json::parse(j.stringify(Json::Stringify::standard)));
+			TINYTEST_CHECK(j == Json::parse(j.stringify()));
+			TINYTEST_CHECK(Json::parse(j.stringify()) == Json::parse(j.stringify(Json::Stringify::standard)));
 		}
 
 		{// etc2
-			BOOST_TEST_MESSAGE("etc2");
+			TINYTEST_MESSAGE("etc2");
 			const auto j = Json::parse(
 				u8R"({
 						"123": true			// 数字だけの文字列
 					}
 				)");
-			BOOST_CHECK(j["123"].get<bool>());
-			BOOST_CHECK(j.at(Json::Pointer(R"(/123)")).get<bool>());
+			TINYTEST_CHECK(j["123"].get<bool>());
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/123)")).get<bool>());
 			// stringify
-			BOOST_CHECK(j == Json::parse(j.stringify()));
+			TINYTEST_CHECK(j == Json::parse(j.stringify()));
 		}
 
-
 		{// JSON Pointer
-			BOOST_TEST_MESSAGE("JSON Pointer");
+			TINYTEST_MESSAGE("JSON Pointer");
 			const auto j = Json::parse(u8R"(
 				{
 					"foo": ["bar", "baz"] ,
@@ -283,21 +242,38 @@ BOOST_AUTO_TEST_CASE(json_test)
 					" " : 7,
 					"m~n" : 8
 				})");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/foo)")) == Json::parse(u8R"(["bar", "baz"])"));
-			BOOST_CHECK(j.at(Json::Pointer(R"(/foo/0)")).get<std::string>() == "bar");
-			BOOST_CHECK(j.at(Json::Pointer(R"(/)")).get<int>() == 0);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/a~1b)")).get<int>() == 1);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/c%d)")).get<int>() == 2);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/e^f)")).get<int>() == 3);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/g|h)")).get<int>() == 4);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/i\\j)")).get<int>() == 5);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/k\"l)")).get<int>() == 6);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/ )")).get<int>() == 7);
-			BOOST_CHECK(j.at(Json::Pointer(R"(/m~0n)")).get<int>() == 8);
-			BOOST_CHECK(j == Json::parse(j.stringify()));
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/foo)")) == Json::parse(R"(["bar", "baz"])"));
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/foo/0)")).get<std::string>() == "bar");
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/)")).get<int>() == 0);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/a~1b)")).get<int>() == 1);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/c%d)")).get<int>() == 2);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/e^f)")).get<int>() == 3);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/g|h)")).get<int>() == 4);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/i\\j)")).get<int>() == 5);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/k\"l)")).get<int>() == 6);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/ )")).get<int>() == 7);
+			TINYTEST_CHECK(j.at(Json::Pointer(R"(/m~0n)")).get<int>() == 8);
+			TINYTEST_CHECK(j == Json::parse(j.stringify()));
+
+			{
+				const std::string s = "/";
+				TINYTEST_CHECK(j.at(Json::Pointer(s.data())).get<int>() == 0);
+				TINYTEST_CHECK(j.at(Json::Pointer(s)).get<int>() == 0);
+#ifdef __cpp_lib_string_view
+				TINYTEST_CHECK(j.at(Json::Pointer(std::string_view(s))).get<int>() == 0);
+#endif
+			}
+#ifdef __cpp_lib_char8_t
+			{
+				const std::u8string s = u8"/";
+				TINYTEST_CHECK(j.at(Json::Pointer(s.data())).get<int>() == 0);
+				TINYTEST_CHECK(j.at(Json::Pointer(s)).get<int>() == 0);
+				TINYTEST_CHECK(j.at(Json::Pointer(std::u8string_view(s))).get<int>() == 0);
+			}
+#endif
 		}
 
-		BOOST_TEST_MESSAGE("float");
+		TINYTEST_MESSAGE("float");
 		for (auto i : { "%8.5e","%lf" }) {
 			std::vector<double> l = {
 				-111.1, 0.0, 1.23456789, 123.456789, -1.23456789, -123.456789,
@@ -305,45 +281,46 @@ BOOST_AUTO_TEST_CASE(json_test)
 				// (std::numeric_limits<double>::min)(),	← "2.22507e-308" となり stod() で例外が発生するので
 			};
 			for (auto n : l) {
-				const auto s = StringFormat(StringFormat("%s", i), n);
+				const auto s = rlib::TinyTest::format(rlib::TinyTest::format("%s", i), n);
 				const auto json = Json::parse(s);
 				auto r0 = json.get<double>();
 				if (r0 > -0.01 && r0 < 0.01) {
-					BOOST_CHECK_SMALL(n - r0, 0.001);
+					TINYTEST_CHECK_SMALL(n - r0, 0.001);
 				} else {
-					BOOST_CHECK_CLOSE(n, r0, 0.001);
+					TINYTEST_CHECK_CLOSE(n, r0, 0.001);
 				}
 				auto r1 = json.get<intmax_t>();
-				BOOST_CHECK(std::llroundl(n) == r1);
+				TINYTEST_CHECK(std::llroundl(n) == r1);
 			}
 		}
 
 		{// int
-			BOOST_TEST_MESSAGE("int");
+			TINYTEST_MESSAGE("int");
 			std::vector<std::intmax_t> l = {
 				0, 1, 123, -1, -123, 0x7fffffffffffffff, 0xfffffffffffffff,
 				(std::numeric_limits<std::intmax_t>::max)(),  (std::numeric_limits<std::intmax_t>::min)()
 			};
 			for (auto n : l) {
-				const auto s = StringFormat(R"(
-						{"a" : %ld}
+				const auto s = rlib::TinyTest::format(R"(
+						{"a" : %lld}
 					)", n);
 				auto json = Json::parse(s);
 				auto r0 = json["a"].get<double>();
-				BOOST_CHECK_CLOSE(static_cast<double>(n), r0, 0.001);
+				TINYTEST_CHECK_CLOSE(static_cast<double>(n), r0, 0.001);
 				auto r1 = json["a"].get<intmax_t>();
-				BOOST_CHECK(n == r1);
+				TINYTEST_CHECK(n == r1);
 			}
 		}
 
 		{// 大きい整数(doubleで処理する)
+			TINYTEST_MESSAGE("large int");
 			const auto j = Json::parse(u8R"(123456789123456789123456789)");
-			BOOST_CHECK_CLOSE(j.get<double>(), 123456789123456789123456789.0, 0.001);
+			TINYTEST_CHECK_CLOSE(j.get<double>(), 123456789123456789123456789.0, 0.001);
 		}
 
 		{// parse error カンマ漏れ
-			BOOST_TEST_MESSAGE("missing comma");
-			BOOST_CHECK_THROW(Json::parse(
+			TINYTEST_MESSAGE("missing comma");
+			TINYTEST_CHECK_THROW(Json::parse(
 				u8R"({
 					"a" : 1
 					"b" : 2
@@ -352,13 +329,8 @@ BOOST_AUTO_TEST_CASE(json_test)
 		}
 
 		{// trailing comma 末尾のカンマ
-			BOOST_TEST_MESSAGE("trailing comma");
-#ifdef __cpp_char8_t
-			std::u8string s =
-#else
-			std::string s =
-#endif
-				u8R"([
+			TINYTEST_MESSAGE("trailing comma");
+			auto s = u8R"([
 					{
 						"a":1,
 						"b":2,
@@ -369,30 +341,30 @@ BOOST_AUTO_TEST_CASE(json_test)
 					],
 				])";
 			const auto j = Json::parse(s);
-			BOOST_CHECK(j[0]["b"].get<int>() == 2);
-			BOOST_CHECK(j[0].get<Json::Map>().size() == 2);
-			BOOST_CHECK(j[1][1].get<int>() == 4);
-			BOOST_CHECK(j[1].get<Json::Array>().size() == 2);
-			BOOST_CHECK(j.get<Json::Array>().size() == 2);
-			BOOST_CHECK_THROW(Json::parse(s,
+			TINYTEST_CHECK(j[0]["b"].get<int>() == 2);
+			TINYTEST_CHECK(j[0].get<Json::Map>().size() == 2);
+			TINYTEST_CHECK(j[1][1].get<int>() == 4);
+			TINYTEST_CHECK(j[1].get<Json::Array>().size() == 2);
+			TINYTEST_CHECK(j.get<Json::Array>().size() == 2);
+			TINYTEST_CHECK_THROW(Json::parse(s,
 				[] {
-					Json::ParseOptions opt;
-					opt.trailingComma = false;
-					return opt;
-				}()), Json::ParseException);
+				Json::ParseOptions opt;
+				opt.trailingComma = false;
+				return opt;
+			}()), Json::ParseException);
 		}
 
 		{// サロゲートペア
-			BOOST_TEST_MESSAGE("surrogate pair");
+			TINYTEST_MESSAGE("surrogate pair");
 			const auto j = Json::parse(u8R"(
 					["\ud83c\udf59","かんきせん\u306f\"換気扇\""]
 				)");
-			BOOST_CHECK(j[0].get<std::string>() == reinterpret_cast<const char*>(u8R"(🍙)"));
-			BOOST_CHECK(j[1].get<std::string>() == reinterpret_cast<const char*>(u8R"(かんきせんは"換気扇")"));
+			TINYTEST_CHECK(j[0].get<std::string>() == reinterpret_cast<const char*>(u8R"(🍙)"));
+			TINYTEST_CHECK(j[1].get<std::string>() == reinterpret_cast<const char*>(u8R"(かんきせんは"換気扇")"));
 		}
 
 		{// stringify
-			BOOST_TEST_MESSAGE("stringify");
+			TINYTEST_MESSAGE("stringify");
 			const auto j = Json::parse(u8R"(
 					[
 						123,"abc",null,true,false,
@@ -405,20 +377,19 @@ BOOST_AUTO_TEST_CASE(json_test)
 			const auto json = j.stringify();
 			const auto j2 = Json::parse(json,
 				[] {
-					Json::ParseOptions opt;
-					opt.comment = false;
-					opt.trailingComma = false;
-					return opt;
-				}());
-			BOOST_CHECK(j == j2);
+				Json::ParseOptions opt;
+				opt.comment = false;
+				opt.trailingComma = false;
+				return opt;
+			}());
+			TINYTEST_CHECK(j == j2);
 		}
 	} catch (std::exception& e) {				// パース 失敗
 		std::cerr << e.what() << std::endl;
-		BOOST_FAIL(e.what());
 	} catch (...) {
-		BOOST_FAIL("unknown");
+		std::cerr << "unknown exception." << std::endl;
 	}
 
+});
 
-}
 

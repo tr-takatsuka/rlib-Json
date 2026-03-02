@@ -16,7 +16,7 @@ JSON パーサーです。C++11～C++20をサポートしています。
 + 参照や編集等で例外は発生しない設計です。( at() 関数を除く)
   + 範囲外の読み込みはデフォルト値が取得され、書き込みの場合は要素を作成します。
 + javascript と違い、数値は浮動小数点数(double)と整数(std::intmax_t)に区別しています。
-+ 入出力は std::string(UTF-8), std::u8string をサポートしています。
++ 入出力は std::string(UTF-8), std::u8string 及び std::string_view, std::u8string_view をサポートしています。
   + パース処理のストリーム入力には非対応です。
 
 
@@ -83,7 +83,7 @@ try {
 
 ## Feature and Limitations
 
-- - Json_test.cpp はテストコードです。テストコードには BOOST.TEST を使っていますのでご注意ください。
+- Json_test.cpp はテストコードです。
 
 ## Licence
 

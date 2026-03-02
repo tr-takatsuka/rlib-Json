@@ -16,7 +16,7 @@ JSON parser implemented in C++. Supports C++11 to C++20.
 + It is designed so that exceptions do not occur when referencing or editing. (Excluding the at() function)
   + For out-of-range reads, the default value is taken, and for writes, an element is created.
 + Unlike javascript, numbers are divided into floating point numbers (double) and integers (std::intmax_t).
-+ Input/output is supported only for std::string (UTF-8), std::u8string.
++ Input/output is supported only for std::string (UTF-8), std::u8string, std::string_view, std::u8string_view.
   + It does not support the parsing process of stream input.
 
 
@@ -83,7 +83,7 @@ try {
 
 ## Feature and Limitations
 
-- It also contains test code using BOOST.TEST. Json_test.cpp
+- Json_test.cpp is test code.
 
 ## Licence
 
