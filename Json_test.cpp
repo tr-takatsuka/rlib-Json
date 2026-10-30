@@ -41,14 +41,14 @@ static rlib::TinyTest t("json_test", [] {
 		list[10].erase("add");								// [10]の位置の連想配列の要素({"add":123})を削除
 		list.erase(9);										// [9]の位置の要素(null)を削除
 		const Json j1 = Json::Map{							// 初期化子リストでの構築です
-			{"a", 123},										//	{	"a": 123,
-			{"b", Json::Array{456, "ABC", 0.5}},			//		"b": [456, "ABC", 0.5],
-			{"c", Json::Map{								//		"c": {
-				{"d", true},								//			"d": true,
-				{"e", nullptr},								//			"e": null
-			}},												//		}
+			{ "a", 123 },										//	{	"a": 123,
+			{ "b", Json::Array{ 456, "ABC", 0.5 } },			//		"b": [456, "ABC", 0.5],
+			{ "c", Json::Map{								//		"c": {
+				{ "d", true },								//			"d": true,
+				{ "e", nullptr },								//			"e": null
+			} },												//		}
 		};													//	}
-		std::map<Json, int> map{ {j,0},{j1,1} };			// std::map, set などのキーにすることが可能です
+		std::map<Json, int> map{ { j,0 },{ j1,1 } };			// std::map, set などのキーにすることが可能です
 		const Json& c = j1.at("f");							// at() で参照すると範囲外の場合に例外が発生します
 	} catch (rlib::Json::ParseException& e) {				// パース 失敗
 		std::cerr << e.what() << std::endl;
@@ -86,19 +86,19 @@ static rlib::TinyTest t("json_test", [] {
 			unsigned long long  ull0 = 0;
 			const unsigned long long  ull1 = 1;
 			Json j = Json::Map{
-				{"null", Json::Array{nullptr}},
-				{"bool", Json::Array{true, false, b0, b1}},
-				{"string", Json::Array{"a", str0, str1}},
-				{"string2", {"a","b"}},
-				{"float", Json::Array{0.0, 1.0f, -123.456e+2, f0, f1, d0, d1}},
-				{"int", Json::Array{
+				{ "null", Json::Array{ nullptr } },
+				{ "bool", Json::Array{ true, false, b0, b1 } },
+				{ "string", Json::Array{ "a", str0, str1 } },
+				{ "string2",{ "a","b" } },
+				{ "float", Json::Array{ 0.0, 1.0f, -123.456e+2, f0, f1, d0, d1 } },
+				{ "int", Json::Array{
 					0, -1, 123,
 					c0,c1,uc0,uc1,
 					i0,i1,ui0,ui1,
 					s0,s1,us0,us1,
 					ll0,ll1,ull0,ull1,
-				}},
-				{"int2", {1,2,3,4}},		// std::initializer_list
+				} },
+				{ "int2",{ 1,2,3,4 } },		// std::initializer_list
 			};
 			for (auto& i : j["null"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Null));
 			for (auto& i : j["bool"].get<Json::Array>()) TINYTEST_CHECK(i.isType(Json::Type::Bool));
@@ -383,6 +383,112 @@ static rlib::TinyTest t("json_test", [] {
 				return opt;
 			}());
 			TINYTEST_CHECK(j == j2);
+		}
+
+		{// stringify 文字列エスケープ
+			TINYTEST_MESSAGE("stringify escape");
+			const auto str = [](const std::string& s) { return Json(s).stringify(); };
+
+			// エスケープが必要な文字
+			TINYTEST_CHECK(str("\"") == R"("\"")");
+			TINYTEST_CHECK(str("\\") == R"("\\")");
+			TINYTEST_CHECK(str("/") == R"("\/")");
+			TINYTEST_CHECK(str("\b\f\n\r\t") == R"("\b\f\n\r\t")");
+
+			// その他の制御文字(0x00～0x1F)は \u00XX
+			TINYTEST_CHECK(str(std::string(1, '\0')) == R"("\u0000")");
+			TINYTEST_CHECK(str("\x01") == R"("\u0001")");
+			TINYTEST_CHECK(str("\x07") == R"("\u0007")");
+			TINYTEST_CHECK(str("\x0b") == R"("\u000b")");
+			TINYTEST_CHECK(str("\x0e") == R"("\u000e")");
+			TINYTEST_CHECK(str("\x1b") == R"("\u001b")");
+			TINYTEST_CHECK(str("\x1f") == R"("\u001f")");
+
+			// エスケープ不要な文字はそのまま (0x20～0x7e / DEL(0x7f) / UTF-8)
+			TINYTEST_CHECK(str("") == R"("")");
+			TINYTEST_CHECK(str("abc XYZ 123 !#$%&'()*+,-.:;<=>?@[]^_`{|}~") == R"("abc XYZ 123 !#$%&'()*+,-.:;<=>?@[]^_`{|}~")");
+			TINYTEST_CHECK(str("\x7f") == "\"\x7f\"");
+			TINYTEST_CHECK(str(reinterpret_cast<const char*>(u8"あ🍙")) == std::string("\"") + reinterpret_cast<const char*>(u8"あ🍙") + "\"");
+
+			// 混在
+			TINYTEST_CHECK(str("a\x01" "b\"c\n") == R"("a\u0001b\"c\n")");
+
+			// 連想配列のキーも同じ
+			{
+				Json::Map m;
+				m["k\x01\n/"] = 1;
+				TINYTEST_CHECK(Json(m).stringify() == R"({"k\u0001\n\/":1})");
+			}
+
+			// NUL 以外の制御文字(0x01～0x1F)は、stringify -> parse で元に戻る
+			{
+				std::string s;
+				for (int c = 1; c < 0x20; c++) s += static_cast<char>(c);
+				s += "\"\\/ \x7f";
+				const auto json = Json(s).stringify();
+				for (const unsigned char c : json) {
+					TINYTEST_CHECK(c >= 0x20);		// 出力に生の制御文字が残っていない
+				}
+				TINYTEST_CHECK(Json::parse(json).get<std::string>() == s);
+
+				Json::Map m;
+				m[s] = Json::Array{ s, 1 };
+				const Json j = m;
+				TINYTEST_CHECK(Json::parse(j.stringify()) == j);
+			}
+		}
+
+		{// parse \u0000 (NUL)
+			TINYTEST_MESSAGE("parse \\u0000");
+			const std::string nul(1, '\0');
+
+			// 単独
+			{
+				const auto j = Json::parse(R"(["\u0000"])");
+				TINYTEST_CHECK(j[0].get<std::string>() == nul);
+				TINYTEST_CHECK(j[0].get<std::string>().size() == 1);
+			}
+			// 文字列の途中・先頭・末尾・連続
+			{
+				const auto j = Json::parse(R"(["a\u0000b","\u0000x","x\u0000","\u0000\u0000","\u0001\u0000\u001f"])");
+				TINYTEST_CHECK(j[0].get<std::string>() == std::string("a\0b", 3));
+				TINYTEST_CHECK(j[1].get<std::string>() == std::string("\0x", 2));
+				TINYTEST_CHECK(j[2].get<std::string>() == std::string("x\0", 2));
+				TINYTEST_CHECK(j[3].get<std::string>() == std::string("\0\0", 2));
+				TINYTEST_CHECK(j[4].get<std::string>() == std::string("\x01\0\x1f", 3));
+			}
+			// 大文字小文字、オブジェクトのキー
+			{
+				const auto j = Json::parse(u8R"({"k\u0000": "\u0000\u00e9\u00E9", "\u0000": 1})");
+				TINYTEST_CHECK(j[std::string("k\0", 2)].get<std::string>() == std::string("\0\xc3\xa9\xc3\xa9", 5));
+				TINYTEST_CHECK(j[nul].get<int>() == 1);
+			}
+			// 他の \u 表記は変わらない(日本語 / サロゲートペア)
+			{
+				const auto j = Json::parse(u8R"(["\u3042\u0000\ud83c\udf59"])");
+				TINYTEST_CHECK(j[0].get<std::string>() == std::string(reinterpret_cast<const char*>(u8"あ")) + nul + reinterpret_cast<const char*>(u8"🍙"));
+			}
+			// 文字そのもの(UTF-8)と \u0000 の混在。u8 リテラルなので実行文字コードに依存しない
+			{
+				const auto j = Json::parse(u8R"(["あ\u0000🍙", "\u0000é", "é\u0000", {"キー\u0000": "値"}])");
+				TINYTEST_CHECK(j[0].get<std::string>() == std::string(reinterpret_cast<const char*>(u8"あ")) + nul + reinterpret_cast<const char*>(u8"🍙"));
+				TINYTEST_CHECK(j[1].get<std::string>() == nul + reinterpret_cast<const char*>(u8"é"));
+				TINYTEST_CHECK(j[2].get<std::string>() == std::string(reinterpret_cast<const char*>(u8"é")) + nul);
+				TINYTEST_CHECK(j[3][std::string(reinterpret_cast<const char*>(u8"キー")) + nul].get<std::string>() == reinterpret_cast<const char*>(u8"値"));
+			}
+			// stringify -> parse で元に戻る (NUL を含む)
+			{
+				std::string s;
+				for (int c = 0; c < 0x20; c++) s += static_cast<char>(c);
+				s += "\"\\/ \x7f";
+				TINYTEST_CHECK(s.size() == 0x20 + 5);
+				TINYTEST_CHECK(Json::parse(Json(s).stringify()).get<std::string>() == s);
+
+				Json::Map m;
+				m[s] = Json::Array{ s, 1 };
+				const Json j = m;
+				TINYTEST_CHECK(Json::parse(j.stringify()) == j);
+			}
 		}
 	} catch (std::exception& e) {				// パース 失敗
 		std::cerr << e.what() << std::endl;
